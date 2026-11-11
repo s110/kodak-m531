@@ -180,3 +180,17 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
   evidencia de Ghidra, todos corregidos en 29e7685 (precondición del pool 6, semántica completa de
   Run_SpecifyFunc, riesgo de caché de instrucciones + MEMRWT, procedencia de las decompilaciones).
 - Arranque de scripts: verificado estáticamente con Ghidra; sólo falta la prueba en cámara (SD).
+
+## Ajustes de la cámara y nitidez (2026-11-11, tercera ronda)
+
+- Lector de ajustes por ID: `0x6615c(id)` = byte en `tabla + 4*id`, tabla en `0x495a5c` (literal en
+  `0x66270`). Para id ≥ 0x61 hay una segunda tabla (`0x66164`).
+- La tabla de ayuda del menú (`0x4617b8…`) empareja etiqueta y número: AF Zone → 7, ISO → 5,
+  **Sharpness → 0xA**. Coincide con los IDs de ajuste (sospecha fuerte, sin prueba en cámara).
+- 33 lecturas del ajuste 0xA en 31 funciones (lista en este commit); las revisadas sólo comparan con 0
+  para dibujar iconos o páginas de menú. Ninguna está en la zona de captura (`0x12xxxx`). La que
+  traduce Sharpness a parámetros del IPP no se encontró: probablemente copia los ajustes a una
+  estructura de captura y la lee por desplazamiento, no por `0x6615c`.
+- Siguiente paso con cámara: con el kit de RAM, leer con peek32 la tabla `0x495a5c` cambiando
+  Sharpness en el menú confirma el ID; luego un barrido de fotos a Sharpness/ISO fijos ubica la tabla
+  de realce y de NR.
