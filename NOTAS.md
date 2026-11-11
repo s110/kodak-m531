@@ -112,3 +112,35 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
   Rollback de esa vía: borrar el archivo y reiniciar (sólo toca RAM).
 - `B:\Batch\Reset.srt` lo corre `0x2bd950` con OK (evento 0x580) en otra pantalla (tabla 0x489fd0).
 - Pendiente: sintaxis exacta del .txt/.srt (parser en torno a `0x1078d8`, `0x1062e0`).
+
+## Intérprete de scripts: sintaxis y funciones (2026-11-11, segunda ronda)
+
+- BASIC con números de línea: `10 REM`, `LET x = expr`, `IF … THEN … ELSE`, `GOTO`, `GOSUB/RETURN`,
+  `END`, `LOG_PRINT`, `SCREEN_PRINT`. Operadores tipo C (`&& || == != >= <= + - * / % ^ ~ & |`),
+  separadores ` ,\t\n`, cadenas entre comillas.
+- `BatchScripts.txt` es una lista: cada línea nombra un `.srt` de la misma carpeta (sin extensión).
+- Llamadas con palabra clave: `SYSTEM f(...)` (tabla 0x4871f4), `FOREIGN f(...)` (0x486334),
+  `DEBUGGING f(...)` (0x487404). Formato de cada entrada: `[ret][nombre\0][args…][0x07]`,
+  tipos 00 int, 01 float, 02 str, 06 void. Catálogo: `docs_script_comandos.txt`;
+  nombre → manejador: `docs_script_manejadores.json` (despachadores 0x29be6c / 0x29c068 / 0x29d118).
+- **Stubs vacíos en producción:** `MemRead` (devuelve 1), `MemWrite`, `IRP_SetDenoiseTH`,
+  `IRP_SetEdgeEnhanceLUT`.
+- **Funcionan:** `SaveCFAonTake(x)` → setter `0x1b0654`; `Take12BitCCDRaw(x)` → SaveCFAonTake(x) + modo
+  de captura 3 (`0x6e0b0`); `Run_SpecifyFunc(f, nargs, 0, a1..a6)` llama a cualquier dirección.
+- Primitivas para RAM: `poke32` = `0x2e8a84` (`*a1 = a2`), `peek32` = `0x198bbc`, `copy32` = `0x2e8a88`
+  (`*a2 = *a1`). Con Run_SpecifyFunc dan lectura/escritura de RAM (y de código) sin flashear.
+- Nombre real de los RAW: `101O####.raw` y `101b####.raw` (el '_' del nombre del JPG pasa a 'O' o 'b').
+- Nitidez: hay ajuste "Sharpness" en el menú normal. La reducción de ruido es del IPP del ASIC
+  (tablas por ISO, sin localizar); se ataca con fotos de prueba.
+
+## Herramientas nuevas
+
+- `tools/m531raw.py`: RAW → DNG con detección automática (formato, ancho, campos, CFA) y balance
+  de blancos por mundo gris. Prueba E2E `tools/e2e_raw.py`: 5 formatos desde una foto real, LibRaw
+  lee el DNG idéntico píxel a píxel. Pendiente con fotos reales: negro, blanco, R vs B y matriz.
+- `tools/km531fw.py`: info / vs-ram / patch con port del validador del firmware y zonas intocables.
+  Prueba E2E `tools/e2e_fw.py` (10 casos) con la cabecera y el código reales.
+- `tools/check_scripts.py`: lista blanca de funciones y destinos de poke32 antes de copiar a la SD.
+- Ghidra 12.1.4 + módulo ARCompact (niooss-ledger d3fbf109, hashes = los de ModernShare) en
+  `tools/ghidra`; proyecto en `ghidra_proj/m531`; script `work/gscripts/Decomp.java`.
+- `REVERSIBILIDAD.md` (niveles 0–4) y `sd_kit/PASOS.md` (qué hacer con la SD).
