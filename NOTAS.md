@@ -227,3 +227,14 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   sondas P2/P3 (sintaxis sin palabra clave / con espacios): el verificador ya las prohíbe.
 - Pendiente conocido: el orden de los dos campos no se detecta (`--invertir-campos`); el negro
   automático sobreestima en escenas sin negros; la matriz de color es provisional.
+
+## Origen de los parámetros de procesado (2026-11-11, quinta ronda)
+
+- `0x151b14` / `0x151ab4` no llenan las tablas: **copian hacia afuera** (getters) desde globales
+  `0x4f8258` (0xac B) y `0x4f81e8` (0x38 B). Las llena la rutina de `0x151890–0x151a00`, que primero
+  llama a `0x6c21c` (lector de calibración/parámetros de la NAND, misma familia que `0x6c55c` y
+  `0x6c5d8`) y luego deriva bytes por ISO (`stb … [r1,36]` y `[r1,72]` en bucle).
+- Esas globales **sí tienen datos en la RAM en reposo**; guardados en
+  `firmware/stock/iq_runtime_0x4f81e8_0x4f8304.bin` (con hash). Son por unidad (calibración).
+- Qué campo es NR y cuál realce no se puede deducir sólo del código: hace falta comparar la RAM
+  tras capturas con ISO y Sharpness distintos (procedimiento en `sd_kit/PASOS.md`, sin SD).
