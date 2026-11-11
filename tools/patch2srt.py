@@ -5,10 +5,12 @@ uso: python3 -I tools/patch2srt.py NOMBRE DIR_RAM:HEX [DIR_RAM:HEX ...] > Batch/
 
 Para cada palabra de 32 bits afectada, el script:
   1. lee la palabra con peek32 y la compara con la del firmware de fábrica verificado; si alguna
-     no coincide (otra versión de firmware o parche ya aplicado), no escribe nada y avisa;
+     no coincide (otra versión de firmware o parche ya aplicado), no escribe nada y avisa. La
+     guardia es cerrada ante fallos: si el IF no se cumple o no se interpreta, salta al aviso;
   2. escribe todas las palabras con poke32;
-  3. vacía la caché de datos sobre el rango (dcache_flush_range 0x24e140) para que el núcleo
-     lea el código nuevo desde la memoria;
+  3. vacía la caché de datos de cada palabra escrita (dcache_flush_range 0x24e140, 4 bytes) para
+     que el núcleo lea el código nuevo desde la memoria. No hay forma de invalidar una posible caché
+     de instrucciones: parchear sólo código que no se ejecutó en esta sesión (ver NOTAS.md);
   4. muestra el resultado en pantalla.
 Es exactamente el mismo cambio de bytes que km531fw.py aplicaría al .FW: así se prueba antes de
 flashear. La sintaxis de IF/GOTO y los números negativos se confirman con la sonda P5 del kit.
@@ -51,21 +53,27 @@ def palabras(parches):
 def generar(nombre, parches):
     ws = palabras(parches)
     L, n = [], 10
-    def add(s):
+    def linea():
         nonlocal n
-        L.append(f'{n} {s}'); n += 10
+        n += 10
+        return n - 10
+    def add(s):
+        L.append(f'{linea()} {s}')
     add(f'REM {nombre}: parche en RAM de {len(ws)} palabra(s); se pierde al apagar')
+    # Guardia cerrada ante fallos: cada IF salta hacia adelante sólo si la palabra es la de fábrica;
+    # si el IF no se cumple, o el intérprete lo ignora, la línea siguiente va al aviso y no escribe.
     for i, (w, o, _) in enumerate(ws):
         add(f'LET v{i} = FOREIGN Run_SpecifyFunc({PEEK32}, 1, 0, {w}, 0, 0, 0, 0, 0)')
-        add(f'IF v{i} != {s32(o)} THEN GOTO 9000')
+        sigue = n + 20
+        add(f'IF v{i} == {s32(o)} THEN GOTO {sigue}')
+        add('GOTO 9000')
     for i, (w, _, nv) in enumerate(ws):
         add(f'LET r{i} = FOREIGN Run_SpecifyFunc({POKE32}, 2, 0, {w}, {s32(nv)}, 0, 0, 0, 0)')
-    ini, fin = ws[0][0], ws[-1][0] + 4
-    add(f'LET f = FOREIGN Run_SpecifyFunc({FLUSH}, 2, 0, {ini}, {fin - ini}, 0, 0, 0, 0)')
-    add(f'SYSTEM ScreenString(20, 200, "{nombre[:20]} OK")')
+        add(f'LET f{i} = FOREIGN Run_SpecifyFunc({FLUSH}, 2, 0, {w}, 4, 0, 0, 0, 0)')
+    add(f'SYSTEM ScreenString(20, 180, "{nombre[:20]} OK")')
     add('SYSTEM delay_us(1500000)')
     add('END')
-    L.append(f'9000 SYSTEM ScreenString(20, 200, "{nombre[:12]} NO: otro firmware")')
+    L.append(f'9000 SYSTEM ScreenString(20, 180, "{nombre[:12]} NO: otro firmware")')
     L.append('9010 SYSTEM delay_us(3000000)')
     L.append('9020 END')
     return '\r\n'.join(L) + '\r\n'

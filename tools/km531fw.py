@@ -4,7 +4,8 @@
 uso:
   km531fw.py info IMAGEN                     cabecera, registros y verificación
   km531fw.py vs-ram IMAGEN                   compara secciones con lo verificado desde la RAM
-  km531fw.py patch IMAGEN SALIDA PARCHE...   PARCHE = DIRECCION_RAM:HEXBYTES (p. ej. 0x2d6608:7fe0d801)
+  km531fw.py patch IMAGEN SALIDA PARCHE... [--particion=TAMAÑO]
+                                             PARCHE = DIRECCION_RAM:HEXBYTES (p. ej. 0x2d6608:7fe0d801)
 
 Formato (validador del propio firmware en 0x2bd46c, rutina de actualización 0x2bcdb8):
   0x000 "RHIR"; 0x006 u8 número de registros; 0x008 u32 palabra de modelo = 0x01121410
@@ -33,11 +34,23 @@ MODELO = 0x01121410
 AQUI = os.path.dirname(os.path.abspath(__file__))
 STOCK = os.path.join(os.path.dirname(AQUI), 'firmware', 'stock')
 CODIGO_STOCK_SHA = '366cb4a4a4b74234e36f5aae3a155c03195c7bb1b82b9685f775131c32a35cbc'
-ZONAS_INTOCABLES = [
+ZONAS_INTOCABLES = sorted([
     (0x2bcdb8, 0x2bd800, 'rutina de actualización'),
     (0x2bd800, 0x2bf000, 'menú oculto / NAND Tool / scripts de arranque'),
     (0x2e06e4, 0x2e0708, 'sum32 usada por el validador'),
-]
+    # funciones de las que depende la vía de vuelta (llamadas desde 0x2bcdb8–0x2bd800)
+    (0x4c1c0, 0x4c1f0, 'palabra de modelo y rutas del .FW'),
+    (0x6584c, 0x658a0, 'tamaño de partición'),
+    (0x657b8, 0x65800, 'NAND'),
+    (0x1433c0, 0x143700, 'lectura de NAND'),
+    (0x1436fc, 0x143800, 'lectura de NAND'),
+    (0x143a90, 0x143b00, 'NAND'),
+    (0x1447a0, 0x144b00, 'escritura de NAND'),
+    (0x3019c8, 0x301a00, 'memcmp de verificación'),
+    (0x7574c, 0x75780, 'pool de memoria del actualizador'),
+    (0xe0c00, 0xe1000, 'acceso a archivos (FAT) del actualizador'),
+])
+MARCADOR_5EN1 = b'INFO' + bytes.fromhex('55aaaa55')
 
 
 def sum32(b: bytes) -> int:
@@ -54,8 +67,13 @@ def registros(d: bytes):
 
 
 def validar_como_firmware(d: bytes, tam_particion=None):
-    """Port del validador 0x2bd46c. Devuelve lista de problemas (vacía = el firmware lo acepta)."""
+    """Port del validador 0x2bd46c. Devuelve lista de problemas (vacía = el firmware lo acepta).
+
+    Además marca el paquete 5-en-1: si el archivo contiene INFO+0x55aaaa55, el actualizador
+    (0x2bd1e4–0x2bd236) llama a 0x2bd664, que escribe la partición 0. Nunca queremos eso."""
     p = []
+    if MARCADOR_5EN1 in d:
+        p.append('contiene el marcador 5-en-1 (INFO+0x55aaaa55): escribiría la partición 0')
     if tam_particion is not None and len(d) > tam_particion:
         p.append('archivo más grande que la partición')
     if d[:4] != b'RHIR':
@@ -90,16 +108,20 @@ def recalcular(d: bytearray, indices):
 
 
 def ubicar(d: bytes, dir_ram: int, n: int):
-    for r in registros(d):
-        if r['tipo'] in (0, 1) and r['dest'] <= dir_ram < r['dest'] + r['size']:
-            if dir_ram + n > r['dest'] + r['size']:
-                raise ValueError(f'el parche en {dir_ram:#x} cruza el final del registro {r["i"]}')
-            return r, r['off'] + dir_ram - r['dest']
-    raise ValueError(f'{dir_ram:#x} no cae en ninguna sección del archivo')
+    hits = [r for r in registros(d) if r['tipo'] in (0, 1) and r['dest'] <= dir_ram < r['dest'] + r['size']]
+    if not hits:
+        raise ValueError(f'{dir_ram:#x} no cae en ninguna sección del archivo')
+    if len(hits) > 1:
+        raise ValueError(f'{dir_ram:#x} cae en varias secciones ({[h["i"] for h in hits]}); '
+                         'los idiomas comparten destino en RAM: parchear por desplazamiento de archivo')
+    r = hits[0]
+    if dir_ram + n > r['dest'] + r['size']:
+        raise ValueError(f'el parche en {dir_ram:#x} cruza el final del registro {r["i"]}')
+    return r, r['off'] + dir_ram - r['dest']
 
 
-def parchear(d: bytes, parches):
-    if validar_como_firmware(d):
+def parchear(d: bytes, parches, tam_particion=None):
+    if validar_como_firmware(d, tam_particion):
         raise ValueError('la imagen base no verifica; no se parchea')
     out = bytearray(d)
     tocados = set()
@@ -111,7 +133,9 @@ def parchear(d: bytes, parches):
         out[off:off + len(datos)] = datos
         tocados.add(r['i'])
     recalcular(out, tocados)
-    problemas = validar_como_firmware(bytes(out))
+    if MARCADOR_5EN1 in out and MARCADOR_5EN1 not in d:
+        raise ValueError('el parche introduce el marcador INFO+0x55aaaa55: el actualizador escribiría la partición 0')
+    problemas = validar_como_firmware(bytes(out), tam_particion)
     if problemas:
         raise ValueError('la salida no verifica: ' + '; '.join(problemas))
     return bytes(out)
@@ -141,11 +165,16 @@ def main():
         sys.exit(0 if same else 1)
     if acc == 'patch':
         salida = sys.argv[3]
-        parches = []
+        parches, particion = [], None
         for s in sys.argv[4:]:
+            if s.startswith('--particion='):
+                particion = int(s.split('=')[1], 0)
+                continue
             a, h = s.split(':')
             parches.append((int(a, 0), bytes.fromhex(h)))
-        out = parchear(d, parches)
+        if particion is None:
+            print('aviso: sin --particion=TAMAÑO (sale de D1 NANDPartition.txt); no se compara con la partición 6')
+        out = parchear(d, parches, particion)
         if os.path.exists(salida):
             sys.exit(f'{salida} ya existe; no se sobrescribe')
         open(salida, 'wb').write(out)

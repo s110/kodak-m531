@@ -7,7 +7,7 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 |---|---|---|---|
 | 0 | Nada: lectura de la RAM por USB | — | — |
 | 1 | Archivos en la SD (HiddenMenu, banderas, scripts) | Borrar los archivos o sacar la SD | Segura por diseño |
-| 2 | RAM en caliente con scripts (`Run_SpecifyFunc` + `poke32`) | Apagar y encender (o sacar la batería) | Segura; ver riesgos abajo |
+| 2 | RAM en caliente con scripts (`Run_SpecifyFunc` + `poke32`) | Apagar y **sacar la batería** unos segundos | Segura; ver riesgos abajo |
 | 3 | Firmware principal flasheado (`SYSTEM\KM531.FW`) | Reflashear el stock reconstruido | **Pendiente**: requiere los volcados de la NAND Tool |
 | 4 | Calibración, parámetros, boot, particiones | Restaurar desde volcado | **Prohibido**: no se toca |
 
@@ -53,6 +53,32 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
    su opción UPDATE FIRMWARE, la NAND Tool. Así, si el firmware modificado arranca, siempre
    puede reflashear el stock por el mismo camino.
 5. Batería cargada y SD probada; nunca flashear con la cámara en USB.
+
+### Correcciones tras la revisión externa (2026-11-11)
+
+- **El actualizador tiene una segunda vía que escribe la partición 0.** Si el `.FW` contiene el
+  marcador `INFO` + `0x55aaaa55`, `0x2bcdb8` llama a `0x2bd664` (validador propio `0x2bd510`,
+  relee con `0x1436fc` + memcmp), que escribe la partición 0 y después la 6. También la usa
+  `0x2bcf28` (actualizador del boot, llamado desde `0x24cc38`, `0x24cdca`, `0x2c1af4`; probablemente
+  lee `TBIB_HD14P.BIN`). `km531fw.py` rechaza cualquier imagen con ese marcador; ningún archivo
+  `TBIB_*.BIN` ni `TBM_*.BIN` va nunca a la SD.
+- **Zonas intocables** ampliadas a las funciones de las que depende la vía de vuelta (modelo
+  `0x4c1c0`, tamaño de partición `0x6584c`, NAND `0x1433c0/0x1436fc/0x143a90/0x1447a0/0x657b8`,
+  memcmp `0x3019c8`, pool `0x7574c`, archivos `0xe0c00–0xe1000`). Pendiente: derivarlas del grafo de
+  llamadas completo en vez de una lista a mano.
+- **Registro 7 (tipo 2)**: sector 46144 (desplazamiento 0x1688000), 0x800 B, contenido desconocido.
+  Antes del nivel 3, ver en `MainCode.dmp`/`NANDP1.dmp` qué hay ahí y si el escritor lo pisa.
+- **Ajustes guardados en la NAND (riesgo 1 del nivel 2)**: volcar E1 `CameraParam.dmp` antes de
+  correr scripts y otra vez después de una sesión con scripts; comparar. Confirmar también si
+  SaveCCDRawOnTake del menú DEBUG queda guardado y cómo se apaga.
+- **Opciones "Dump" de la NAND Tool**: su inocuidad sale de los nombres. Antes de usarlas,
+  fotografiar el menú en la cámara y compararlo con la lista; revisar en el código que cada
+  manejador de Dump sólo lea la NAND y escriba un archivo.
+- **Ensayo del actualizador** antes del primer flasheo real: lanzar UPDATE FIRMWARE con un `.FW`
+  con sum32 mal hecha a propósito y confirmar el rechazo ("Firmware file is invalid"). Verificado en
+  código que el validador corre antes de escribir en `0x2bd5bc`; falta revisar el resto de la ruta.
+- **Tamaño de la partición 6**: sacarlo de D1 `NANDPartition.txt` y pasarlo siempre con
+  `km531fw.py patch … --particion=TAMAÑO`.
 
 ## Nivel 4: nunca
 

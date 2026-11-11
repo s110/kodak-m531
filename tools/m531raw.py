@@ -260,13 +260,18 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None):
         cands = detectar_formato(datos[0])
         if bits:
             cands = [c for c in cands if c['bits'] == bits] or cands
+        if not cands:
+            raise SystemExit('archivo demasiado pequeño o truncado: ningún formato da 3 filas de 7000 píxeles')
         elegido = cands[0]
         packing = elegido['packing']
         ancho = ancho or elegido['ancho']
     else:
         cands = []
         if ancho is None:
-            ancho = [c for c in detectar_formato(datos[0]) if c['packing'] == packing][0]['ancho']
+            c = [c for c in detectar_formato(datos[0]) if c['packing'] == packing]
+            if not c:
+                raise SystemExit(f'no se pudo detectar el ancho para {packing}; pasar --width')
+            ancho = c[0]['ancho']
     campos = [a_imagen(d, packing, ancho) for d in datos]
     img, layout_usado = combinar(campos, layout)
     if img.shape[0] % 2:
@@ -296,8 +301,17 @@ def main():
     if len(a.archivos) > 2:
         sys.exit('máximo dos archivos (los dos campos de un disparo)')
     img, info = analizar(a.archivos, a.bits, a.packing, a.width, a.layout, a.cfa)
+    # Negro provisional: percentil bajo de la escena. Sobreestima si la escena no tiene negros puros;
+    # el valor real sale del negro óptico de una toma real (o --black).
     negro = a.black if a.black is not None else int(np.percentile(img, 0.05))
-    blanco = a.white if a.white is not None else (1 << info['bits']) - 1
+    if a.white is not None:
+        blanco = a.white
+    elif info['bits'] == 16:
+        # contenedor de 16 bits: el sensor da 12–14; usar los bits realmente ocupados
+        blanco = (1 << max(int(img.max()).bit_length(), 12)) - 1
+    else:
+        blanco = (1 << info['bits']) - 1
+    info['niveles_provisionales'] = a.black is None or a.white is None
     info.update(negro=negro, blanco=blanco)
     if a.accion == 'info':
         print(json.dumps(info, indent=2, ensure_ascii=False))

@@ -104,13 +104,16 @@ def main():
         det = dict(packing=info['packing'], ancho=info['ancho'], alto=info['alto'], layout=info['layout'], cfa=info['cfa'])
         with rawpy.imread(dng) as rp:
             leido = rp.raw_image.copy()
+            blanco_dng = int(rp.white_level)
             patron = ''.join('RGBG'[c] for c in rp.raw_pattern.ravel())
             rgb = rp.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
         identico = leido.shape == m.shape and bool(np.array_equal(leido, m))
         Image.fromarray(rgb).resize((rgb.shape[1] // 3, rgb.shape[0] // 3)).save(dng[:-4] + '_preview.png')
-        ok = det == caso['esperado'] and identico
+        blanco_ok = int(m.max()) <= blanco_dng < 2 * max(int(m.max()), 255) + 1
+        ok = det == caso['esperado'] and identico and blanco_ok
         fallos += not ok
         caso.update(ok=ok, detectado=det, libraw_identico=identico, libraw_patron=patron,
+                    blanco_dng=blanco_dng, max_datos=int(m.max()), blanco_ok=blanco_ok,
                     negro_esperado=negro, negro_detectado=info['negro'], segundos=round(dt, 1),
                     dng_sha256=hashlib.sha256(open(dng, 'rb').read()).hexdigest(),
                     candidatos=info['candidatos'][:3])

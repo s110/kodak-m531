@@ -83,6 +83,9 @@ def main():
         'parche sobre la rutina de actualización': ('0x2bce00:00000000',),
         'parche que cruza el final de la sección de código': (f"{r0['dest'] + r0['size'] - 2:#x}:00000000",),
         'dirección fuera del archivo': ('0x3000000:00',),
+        'dirección en varias secciones (idiomas con mismo destino)': ('0x5ae010:00',),
+        'marcador 5-en-1 (escribiría la partición 0)': ('0x2d6608:494e464f55aaaa55',),
+        'parche sobre el escritor de NAND': ('0x1447a0:00000000',),
     }
     for nombre, parches in rechazos.items():
         s = os.path.join(OUT, 'NO_DEBE_EXISTIR.FW')

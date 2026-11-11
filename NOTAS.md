@@ -159,7 +159,7 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
   Prueba E2E `tools/e2e_fw.py` (10 casos) con la cabecera y el código reales.
 - `tools/check_scripts.py`: lista blanca de funciones y destinos de poke32 antes de copiar a la SD.
 - Ghidra 12.1.4 + módulo ARCompact (niooss-ledger d3fbf109, hashes = los de ModernShare) en
-  `tools/ghidra`; proyecto en `ghidra_proj/m531`; script `work/gscripts/Decomp.java`.
+  `tools/ghidra`; proyecto en `ghidra_proj/m531`; script `tools/ghidra_scripts/Decomp.java`.
 - `REVERSIBILIDAD.md` (niveles 0–4) y `sd_kit/PASOS.md` (qué hacer con la SD).
 
 ## Pendiente al cortar la sesión (2026-11-11)
@@ -169,11 +169,11 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
   depuración del IPP que se incrusta en el JPEG, delimitado por `iq_debug_str_sunny8`/`end_str_sunny8`
   y `iq_debug_str_asic`/`end_str_asic` (cadenas en 0x43c718.., referenciadas desde 0x17b2dc). Con un
   JPEG real de la M531 ese bloque daría los parámetros de NR/realce usados.
-  **Revisado con Ghidra (`docs/decomp_iq_debug.c`):** lo arma `0x17b1c4`. La sección sunny8 vuelca
-  calibración/AE/sombreado (`0x17b9f0`, `0x17bb6c` → `0x6c55c`, `0x6c5d8`, `0x17bf60…`) y la sección
-  asic sólo 6 valores de 16 bits. Los parámetros de NR y realce no están expuestos por nombre: viven
-  en las tablas del IPP. Se ubican comparando fotos reales a distintos ISO y Sharpness (depende de la
-  SD); la vía sin SD queda agotada.
+  **Revisado con Ghidra (`docs/decomp_iq_debug.c`):** lo arma `0x17b1c4`. `0x17b9f0` sólo copia una
+  cadena ("Hagrid14", nombre de proyecto); `0x17bb6c` vuelca calibración/AE/sombreado (`0x6c55c`,
+  `0x6c5d8`, `0x17bf60…`). La sección asic ocupa 0x34c B (no 6 valores). Quedan sin decompilar
+  `0x17ba40` y `0x17bef0` (este último lee tablas por ISO en `0x50f9b4`): son el siguiente candidato
+  para NR/realce sin SD. Con fotos reales a distintos ISO y Sharpness se confirma.
 - Plantilla JPEG/EXIF de la cámara en RAM en 0x43dbac.
 - Revisión externa: el agente Fable fue bloqueado por sus salvaguardas (req_011Cgve3VsVH4Y2hax6AVghm).
   Una revisión /code-review high (sobre el commit d5d962c) sí terminó: 7 hallazgos sobre las notas y la
