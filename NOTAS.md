@@ -194,3 +194,15 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
 - Siguiente paso con cámara: con el kit de RAM, leer con peek32 la tabla `0x495a5c` cambiando
   Sharpness en el menú confirma el ID; luego un barrido de fotos a Sharpness/ISO fijos ubica la tabla
   de realce y de NR.
+
+## Parámetros de procesado por ISO (2026-11-11, cuarta ronda)
+
+- `0x17bef0` (`docs/decomp_iq_iso.c`) lee, para el índice actual (`0x5dbd0` → `0x56058`, nivel de
+  ISO), campos +0x24, +0x48, +0x3c de la tabla en `0x50f9b4`, y bytes −0x48, −0x47, −0x42 del bloque
+  en `0x50facc`; más dos valores de `0x151b30` / `0x151bb0`. `0x17ba40` arma el encabezado del bloque
+  (ISO, exposición, AE…). Candidatos fuertes a NR/realce/gamma por ISO.
+- Esas tablas **están en cero en la RAM en reposo**: se llenan al capturar (`0x151b14` hace memcpy de
+  0xac bytes a la global; `0x151ab4` de 0x38). No están en la imagen del firmware.
+- **Vía sin SD:** sin tarjeta, la cámara guarda en la memoria interna. Tomar una foto (o varias, a
+  ISO y Sharpness distintos) y leer por USB `0x50f900–0x50fc00` con `tools/leer_ram.py` muestra los
+  valores reales y cómo cambian. Sólo requiere la cámara encendida y conectada.

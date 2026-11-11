@@ -54,3 +54,8 @@ La cámara queda como venía; para confirmarlo, comparar un volcado E1 `CameraPa
 - Nitidez (Sharpness): Baja, para un JPEG menos procesado.
 - Con RAW activo, cada foto escribe además dos archivos grandes: usa una SD rápida (clase 10)
   y espera a que termine la escritura antes de apagar.
+
+## Opcional sin SD — parámetros de procesado por ISO
+1. Sin tarjeta en la cámara, toma una foto (va a la memoria interna).
+2. Conéctala por USB encendida: Claude lee `0x50f900–0x50fc00` con `tools/leer_ram.py`.
+3. Repite con ISO 80, 400 y 1600, y con Sharpness alto y bajo: la diferencia ubica NR y realce.
