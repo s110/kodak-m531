@@ -154,3 +154,16 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
 - Ghidra 12.1.4 + módulo ARCompact (niooss-ledger d3fbf109, hashes = los de ModernShare) en
   `tools/ghidra`; proyecto en `ghidra_proj/m531`; script `work/gscripts/Decomp.java`.
 - `REVERSIBILIDAD.md` (niveles 0–4) y `sd_kit/PASOS.md` (qué hacer con la SD).
+
+## Pendiente al cortar la sesión (2026-11-11)
+
+- Nitidez/ruido: el ajuste "Sharpness" del menú existe; la tabla EXIF vive en RAM (entrada Sharpness
+  0x3e93ac, valor en 0x3e93b4; selector de sub-tablas en 0x50580–0x505f0). Hay un bloque de
+  depuración del IPP que se incrusta en el JPEG, delimitado por `iq_debug_str_sunny8`/`end_str_sunny8`
+  y `iq_debug_str_asic`/`end_str_asic` (cadenas en 0x43c718.., referenciadas desde 0x17b2dc). Con un
+  JPEG real de la M531 ese bloque daría los parámetros de NR/realce usados. Siguiente paso:
+  decompilar 0x17b2xx y ubicar quién llena el bloque.
+- Plantilla JPEG/EXIF de la cámara en RAM en 0x43dbac.
+- Revisión externa: el agente Fable fue bloqueado por sus salvaguardas (req_011Cgve3VsVH4Y2hax6AVghm);
+  la revisión con Opus se detuvo por límite de uso antes de terminar. Pendiente relanzarla.
+- Arranque de scripts: verificado estáticamente con Ghidra; sólo falta la prueba en cámara (SD).
