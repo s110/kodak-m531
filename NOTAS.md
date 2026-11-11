@@ -105,21 +105,28 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
   SetISOSpeed/SetFocusPosition, SetIsoSpeed, SetAdGain, Key* (teclas simuladas), Reboot, UpdateFW.
 - Lanzadores: `0x53e44(unidad)` busca `<unidad>\Batch\BatchScripts.txt`; `0x53ebc(ruta)` corre un
   .srt concreto (usa `\TP$BATCH` y `\TEMP.SRT` como temporales). Log: "***** Script %s starts here".
-- **Arranque:** la pantalla de inicio (tabla de eventos `0x4706d8`, junto a las cadenas
-  `B:\DISABLE_AUTO_POWER_OFF` etc.) atiende el evento `0x7c0a` en `0x1fdff4`, que en `0x1fe1dc`
-  llama a `0x2bee0c("B:")` → `0x53e44` → ejecuta `B:\Batch\BatchScripts.txt` si existe.
-  **Corrección y verificación con el decompilador (Ghidra):** la llamada en `0x1fe1dc` pertenece al
-  manejador del evento `0x7c0b` (`0x1fe124`, arranque), no al de `0x7c0a`. Ese manejador llama a
-  `0x2bee0c("B:")` en cada encendido normal, salvo si hay una entrada especial pendiente
-  (`0x107c98(0, 0x3301, 1)`) o un modo especial (`0x11d95c`). `0x2bee0c` reserva 128 KB y llama a
-  `0x53e44`, que abre `B:\Batch\BatchScripts.txt` y, si existe, lo encola al hilo de scripts.
-  Falta sólo confirmarlo en la cámara (sondas del kit fase 1).
-- `Run_SpecifyFunc(f, nargs, outpos, a1..a6)` verificado con el decompilador: con outpos = 0
-  devuelve `f(a1, …)`.
-- Caché: hay caché de datos (`dc_ctrl/dc_ivdl/dc_fldl`) y ninguna operación de caché de
-  instrucciones. `dcache_flush_range(addr, len)` = `0x24e140`, `dcache_inval_range` = `0x24e108`.
-  Los parches de código en RAM (`tools/patch2srt.py`) vacían la caché tras escribir.
-  Rollback de esa vía: borrar el archivo y reiniciar (sólo toca RAM).
+- **Arranque (verificado en el código, falta probarlo en la cámara):** en la tabla de eventos de la
+  pantalla de inicio (`0x4706d8`) el evento `0x7c0b` va a `0x1fe124` (el `0x7c0a` va a `0x1fdff4`, que
+  no lanza scripts). `0x1fe124` llama en `0x1fe1dc` a `0x2bee0c("B:")` en cada encendido normal, salvo
+  si hay una entrada especial pendiente (`0x107c98(0, 0x3301, 1)`) o un modo especial (`0x11d95c`).
+  `0x2bee0c` pide el búfer del pool 6 (`0x4b980(6)`, `0x7574c`); **sólo si mide ≥ 0x20000 B** llama a
+  `0x53e44`, que abre `B:\Batch\BatchScripts.txt` y, si existe, lo encola al hilo de scripts. Si el
+  búfer falta o es más chico, no corre nada y no avisa: si las sondas no aparecen, revisar esto antes
+  de dar por refutado el arranque automático.
+  Rollback de esta vía: borrar `B:\Batch\` (o sacar la SD) y reiniciar.
+- `Run_SpecifyFunc(f, nargs, outpos, a1..a6)` (`0x2da0c4`), leído en el desensamblado: si
+  `nargs < outpos` o `nargs > 6` devuelve 0 **sin llamar** a f; con `outpos = 0` devuelve
+  `f(a1, …, a_nargs)`; con `outpos = k ≠ 0` reemplaza `a_k` por `&resultado`. Siempre guarda f en la
+  global `0x3e5060`. Ojo: en `docs/decomp_clave_1.c` Ghidra muestra nargs 3 y 4 llamando sólo a
+  f(a1, a2); es un error del decompilador: en `0x2da174–0x2da1ae` r2 = a3 y r3 = a4 siguen cargados.
+  Los scripts del kit sólo usan nargs 1 y 2.
+- Caché: hay caché de datos (`dc_ctrl/dc_ivdl/dc_fldl`); `dcache_flush_range(addr, len)` = `0x24e140`,
+  `dcache_inval_range` = `0x24e108`. **No está descartado que exista caché de instrucciones:** el
+  firmware no la toca, pero el cargador de arranque podría encenderla y nada lee el registro de
+  configuración (IC_BUILD, aux 0x77). Si existe, una función ya ejecutada podría seguir corriendo
+  instrucciones viejas tras un parche en RAM. Mitigación: los primeros parches de código (MEMRW) van
+  sobre funciones que nunca se ejecutaron antes (los stubs MemRead/MemWrite), y el kit verifica el
+  resultado ejecutando el código parcheado (`MEMRWT.srt`). Rollback de los parches en RAM: apagar.
 - `B:\Batch\Reset.srt` lo corre `0x2bd950` con OK (evento 0x580) en otra pantalla (tabla 0x489fd0).
 - Pendiente: sintaxis exacta del .txt/.srt (parser en torno a `0x1078d8`, `0x1062e0`).
 

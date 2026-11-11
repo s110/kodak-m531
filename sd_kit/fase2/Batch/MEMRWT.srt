@@ -1,0 +1,11 @@
+10 REM verifica MEMRW ejecutando el codigo parcheado: MemRead debe dar lo mismo que peek32
+20 LET a = SYSTEM MemRead(4059364)
+30 LET b = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
+40 SYSTEM ScreenInt32(20, 230, a)
+50 SYSTEM ScreenInt32(20, 260, b)
+60 IF a == b THEN GOTO 90
+70 SYSTEM ScreenString(20, 290, "MEMRWT NO")
+80 GOTO 100
+90 SYSTEM ScreenString(20, 290, "MEMRWT OK")
+100 SYSTEM delay_us(3000000)
+110 END

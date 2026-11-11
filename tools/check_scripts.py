@@ -17,7 +17,7 @@ import sys
 PERMITIDAS = {
     'ScreenString', 'ScreenInt32', 'ScreenFloat32', 'ScreenInt32_Hex', 'delay_us', 'ClearOSD',
     'SaveCFAonTake', 'SaveCFAonIRP', 'Take12BitCCDRaw', 'EnableS1ImgSaving',
-    'Run_SpecifyFunc', 'GetSystemDateTime', 'DebugMsgLog',
+    'Run_SpecifyFunc', 'GetSystemDateTime', 'DebugMsgLog', 'MemRead',
 }
 PEEK32, POKE32, FLUSH = 0x198bbc, 0x2e8a84, 0x24e140
 ZONAS_PROHIBIDAS = [  # (inicio, fin, motivo)

@@ -1,3 +1,7 @@
+// Fuente: work/code_only.bin = dump/ram_snapshot.bin[0:0x500000], sha256 9e4c35fe181e2c8397ee7516f5776be494cf1c32c6a775c8a6899a821ad3f69a
+// Ghidra 12.1.4 + ARCompact:LE:32:default (niooss-ledger d3fbf109), BinaryLoader, base 0, -noanalysis
+// Script: tools/ghidra_scripts/Decomp.java. Es salida del decompilador, no prueba: ver NOTAS.md (p. ej. nargs 3/4 de Run_SpecifyFunc).
+
 // ==== 0x1fe124 -> FUN_ram_001fe124 @ ram:001fe124
 
 void FUN_ram_001fe124(void)
