@@ -34,3 +34,11 @@ Antes de empezar: batería cargada. Cámara fuera del USB salvo donde se indique
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/`.
 Apagar y encender. La cámara queda exactamente como venía.
+
+## Ajustes de velocidad sin modificar nada (menú normal de la cámara)
+- Advertencia de desenfoque (Blur Warning): Off. Tras cada foto, la cámara analiza la imagen
+  (setter `0x68a48`, el mismo que el comando de script BlurWarning).
+- Revisión rápida (Quickview) tras la foto: Off.
+- Nitidez (Sharpness): Baja, para un JPEG menos procesado.
+- Con RAW activo, cada foto escribe además dos archivos grandes: usa una SD rápida (clase 10)
+  y espera a que termine la escritura antes de apagar.
