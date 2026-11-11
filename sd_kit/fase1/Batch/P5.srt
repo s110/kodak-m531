@@ -1,0 +1,8 @@
+10 REM sintaxis de IF/GOTO y numeros negativos (la usa el guardia de patch2srt)
+20 LET n = -5
+30 IF n == -5 THEN GOTO 60
+40 SYSTEM ScreenString(20, 170, "P5 IF NO")
+50 GOTO 70
+60 SYSTEM ScreenString(20, 170, "P5 IF OK")
+70 SYSTEM delay_us(1500000)
+80 END

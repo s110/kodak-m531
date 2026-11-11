@@ -5,7 +5,7 @@ uso: python3 -I tools/check_scripts.py CARPETA_BATCH
 
 Falla (código 1) si un script:
   * llama a una función que no está en la lista permitida (ver REVERSIBILIDAD.md);
-  * usa Run_SpecifyFunc con un destino que no sea peek32 o poke32;
+  * usa Run_SpecifyFunc con un destino que no sea peek32, poke32 o dcache_flush_range;
   * escribe con poke32 dentro de la rutina de actualización, la NAND Tool o fuera de la SDRAM;
   * no tiene número de línea, repite números o no termina en END;
   * BatchScripts.txt nombra un script que no existe (o le pone extensión).
@@ -19,7 +19,7 @@ PERMITIDAS = {
     'SaveCFAonTake', 'SaveCFAonIRP', 'Take12BitCCDRaw', 'EnableS1ImgSaving',
     'Run_SpecifyFunc', 'GetSystemDateTime', 'DebugMsgLog',
 }
-PEEK32, POKE32 = 0x198bbc, 0x2e8a84
+PEEK32, POKE32, FLUSH = 0x198bbc, 0x2e8a84, 0x24e140
 ZONAS_PROHIBIDAS = [  # (inicio, fin, motivo)
     (0x2bcdb8, 0x2bd800, 'rutina de actualización de firmware'),
     (0x2bd800, 0x2bf000, 'menú oculto / NAND Tool / scripts de arranque'),
@@ -58,8 +58,10 @@ def revisar_srt(ruta):
             if len(v) != 9:
                 errores.append(f'{ruta}:{n}: Run_SpecifyFunc necesita 9 argumentos')
                 continue
-            if v[0] not in (PEEK32, POKE32):
-                errores.append(f'{ruta}:{n}: Run_SpecifyFunc a {v[0]:#x}, sólo se permite peek32/poke32')
+            if v[0] not in (PEEK32, POKE32, FLUSH):
+                errores.append(f'{ruta}:{n}: Run_SpecifyFunc a {v[0]:#x}, sólo se permite peek32/poke32/flush')
+            if v[0] == FLUSH and not (0 < v[4] <= 0x10000):
+                errores.append(f'{ruta}:{n}: flush con longitud {v[4]} fuera de rango')
             dest = v[3]
             if not 0 <= dest < RAM_MAX or dest % 4:
                 errores.append(f'{ruta}:{n}: dirección {dest:#x} fuera de RAM o desalineada')

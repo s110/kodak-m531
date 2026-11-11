@@ -1,0 +1,14 @@
+10 REM MEMRW: parche en RAM de 2 palabra(s); se pierde al apagar
+20 LET v0 = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 2975240, 0, 0, 0, 0, 0)
+30 IF v0 != -670990368 THEN GOTO 9000
+40 LET v1 = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 2975244, 0, 0, 0, 0, 0)
+50 IF v1 != 2027978464 THEN GOTO 9000
+60 LET r0 = FOREIGN Run_SpecifyFunc(3050116, 2, 0, 2975240, -2147450912, 0, 0, 0, 0)
+70 LET r1 = FOREIGN Run_SpecifyFunc(3050116, 2, 0, 2975244, -1608482848, 0, 0, 0, 0)
+80 LET f = FOREIGN Run_SpecifyFunc(2416960, 2, 0, 2975240, 8, 0, 0, 0, 0)
+90 SYSTEM ScreenString(20, 200, "MEMRW OK")
+100 SYSTEM delay_us(1500000)
+110 END
+9000 SYSTEM ScreenString(20, 200, "MEMRW NO: otro firmware")
+9010 SYSTEM delay_us(3000000)
+9020 END
