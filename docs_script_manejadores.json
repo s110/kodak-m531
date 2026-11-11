@@ -1,833 +1,1038 @@
 {
  "Album": {
   "firma": "void Album()",
-  "manejador": "0x2d6798"
+  "manejador": "0x2d6798",
+  "tabla": "FOREIGN"
  },
  "AutoPowerOff": {
   "firma": "void AutoPowerOff(int)",
-  "manejador": "0x2d679c"
+  "manejador": "0x2d679c",
+  "tabla": "FOREIGN"
  },
  "BatteryDoFullLoad": {
   "firma": "int BatteryDoFullLoad(int)",
-  "manejador": "0x2d67f8"
+  "manejador": "0x2d67f8",
+  "tabla": "FOREIGN"
  },
  "BatteryGaugeEnable": {
   "firma": "void BatteryGaugeEnable(int)",
-  "manejador": "0x2d67bc"
+  "manejador": "0x2d67bc",
+  "tabla": "FOREIGN"
  },
  "BatteryCalibrateAD": {
   "firma": "int BatteryCalibrateAD(int, int, int)",
-  "manejador": "0x2d6818"
+  "manejador": "0x2d6818",
+  "tabla": "FOREIGN"
  },
  "BlurWarning": {
   "firma": "void BlurWarning(int)",
-  "manejador": "0x2d6850"
+  "manejador": "0x2d6850",
+  "tabla": "FOREIGN"
  },
  "ClearOSD": {
   "firma": "void ClearOSD()",
-  "manejador": "0x2d6870"
+  "manejador": "0x2d6870",
+  "tabla": "FOREIGN"
  },
  "CameraSounds": {
   "firma": "void CameraSounds(int, int)",
-  "manejador": "0x2d6884"
+  "manejador": "0x2d6884",
+  "tabla": "FOREIGN"
  },
  "ColorMode": {
   "firma": "void ColorMode(int)",
-  "manejador": "0x2d68b0"
+  "manejador": "0x2d68b0",
+  "tabla": "FOREIGN"
  },
  "DateStamp": {
   "firma": "void DateStamp(int)",
-  "manejador": "0x2d68d0"
+  "manejador": "0x2d68d0",
+  "tabla": "FOREIGN"
  },
  "DateTime": {
   "firma": "void DateTime(int, int, int, int, int)",
-  "manejador": "0x2d68f0"
+  "manejador": "0x2d68f0",
+  "tabla": "FOREIGN"
  },
  "DisableMCUFullLoad": {
   "firma": "void DisableMCUFullLoad()",
-  "manejador": "0x2d6814"
+  "manejador": "0x2d6814",
+  "tabla": "FOREIGN"
  },
  "EnableMCUFullLoad": {
   "firma": "void EnableMCUFullLoad()",
-  "manejador": "0x2d6810"
+  "manejador": "0x2d6810",
+  "tabla": "FOREIGN"
  },
  "ExposureBracket": {
   "firma": "void ExposureBracket(int)",
-  "manejador": "0x2d6934"
+  "manejador": "0x2d6934",
+  "tabla": "FOREIGN"
  },
  "EVCompensation": {
   "firma": "void EVCompensation(int)",
-  "manejador": "0x2d6954"
+  "manejador": "0x2d6954",
+  "tabla": "FOREIGN"
  },
  "FE_FlashColorProfileTest": {
   "firma": "void FE_FlashColorProfileTest(int, int, int)",
-  "manejador": "0x2d6974"
+  "manejador": "0x2d6974",
+  "tabla": "FOREIGN"
  },
  "FE_FlashTimeProfileTest": {
   "firma": "void FE_FlashTimeProfileTest(int, int, int)",
-  "manejador": "0x2d6998"
+  "manejador": "0x2d6998",
+  "tabla": "FOREIGN"
  },
  "FE_GuideNumberTest": {
   "firma": "void FE_GuideNumberTest(int, int, int, int)",
-  "manejador": "0x2d69bc"
+  "manejador": "0x2d69bc",
+  "tabla": "FOREIGN"
  },
  "FE_ManualFlashTimeTest": {
   "firma": "void FE_ManualFlashTimeTest(int, int, int, int)",
-  "manejador": "0x2d69d0"
+  "manejador": "0x2d69d0",
+  "tabla": "FOREIGN"
  },
  "FE_FlashFire": {
   "firma": "void FE_FlashFire(int, int, int, int, int, int, int, int)",
-  "manejador": "0x2d69f8"
+  "manejador": "0x2d69f8",
+  "tabla": "FOREIGN"
  },
  "FE_PreflashTimeCompensationTest": {
   "firma": "void FE_PreflashTimeCompensationTest(int, int)",
-  "manejador": "0x2d6a30"
+  "manejador": "0x2d6a30",
+  "tabla": "FOREIGN"
  },
  "FE_WriteStrobeTypeToNANDCali": {
   "firma": "void FE_WriteStrobeTypeToNANDCali(int, int, int)",
-  "manejador": "0x2d6a54"
+  "manejador": "0x2d6a54",
+  "tabla": "FOREIGN"
  },
  "Flash": {
   "firma": "void Flash(int)",
-  "manejador": "0x2d6a78"
+  "manejador": "0x2d6a78",
+  "tabla": "FOREIGN"
  },
  "FlashCali_Quench": {
   "firma": "void FlashCali_Quench()",
-  "manejador": "0x2d6a98"
+  "manejador": "0x2d6a98",
+  "tabla": "FOREIGN"
  },
  "FM_DeleteAllFileObjectHandle": {
   "firma": "int FM_DeleteAllFileObjectHandle(int)",
-  "manejador": "0x2d6a9c"
+  "manejador": "0x2d6a9c",
+  "tabla": "FOREIGN"
  },
  "FM_FileCmd": {
   "firma": "int FM_FileCmd(str, int, int)",
-  "manejador": "0x2d6b94"
+  "manejador": "0x2d6b94",
+  "tabla": "FOREIGN"
  },
  "FocusZone": {
   "firma": "void FocusZone(int)",
-  "manejador": "0x2d6bd8"
+  "manejador": "0x2d6bd8",
+  "tabla": "FOREIGN"
  },
  "Format": {
   "firma": "void Format(int)",
-  "manejador": "0x2d6bf8"
+  "manejador": "0x2d6bf8",
+  "tabla": "FOREIGN"
  },
  "GetBatteryData": {
   "firma": "int GetBatteryData(int)",
-  "manejador": "0x2d67e4"
+  "manejador": "0x2d67e4",
+  "tabla": "FOREIGN"
  },
  "GetTemperatureData": {
   "firma": "int GetTemperatureData(int)",
-  "manejador": "0x2d6ce4"
+  "manejador": "0x2d6ce4",
+  "tabla": "FOREIGN"
  },
  "I2CSetWDT": {
   "firma": "int I2CSetWDT(int)",
-  "manejador": "0x2d6cf8"
+  "manejador": "0x2d6cf8",
+  "tabla": "FOREIGN"
  },
  "ImageStorage": {
   "firma": "void ImageStorage(int)",
-  "manejador": "0x2d6d0c"
+  "manejador": "0x2d6d0c",
+  "tabla": "FOREIGN"
  },
  "InfoMgr_DownloadCali": {
   "firma": "int InfoMgr_DownloadCali(str, int)",
-  "manejador": "0x2d6d2c"
+  "manejador": "0x2d6d2c",
+  "tabla": "FOREIGN"
  },
  "InfoMgr_CleanSingleCaliData": {
   "firma": "int InfoMgr_CleanSingleCaliData(int)",
-  "manejador": "0x2d6dd8"
+  "manejador": "0x2d6dd8",
+  "tabla": "FOREIGN"
  },
  "InfoMgr_SetDefaultParamToNAND": {
   "firma": "void InfoMgr_SetDefaultParamToNAND()",
-  "manejador": "0x2d6df8"
+  "manejador": "0x2d6df8",
+  "tabla": "FOREIGN"
  },
  "InfoMgr_ShowCali": {
   "firma": "int InfoMgr_ShowCali(int)",
-  "manejador": "0x2d6e18"
+  "manejador": "0x2d6e18",
+  "tabla": "FOREIGN"
  },
  "KeyDelete": {
   "firma": "void KeyDelete(int)",
-  "manejador": "0x2d6e30"
+  "manejador": "0x2d6e30",
+  "tabla": "FOREIGN"
  },
  "KeyDown": {
   "firma": "void KeyDown(int)",
-  "manejador": "0x2d6e64"
+  "manejador": "0x2d6e64",
+  "tabla": "FOREIGN"
  },
  "KeyFlash": {
   "firma": "void KeyFlash(int)",
-  "manejador": "0x2d6f00"
+  "manejador": "0x2d6f00",
+  "tabla": "FOREIGN"
  },
  "KeyHoldDown": {
   "firma": "void KeyHoldDown(int)",
-  "manejador": "0x2d6e98"
+  "manejador": "0x2d6e98",
+  "tabla": "FOREIGN"
  },
  "KeyHoldLeft": {
   "firma": "void KeyHoldLeft(int)",
-  "manejador": "0x2d6f68"
+  "manejador": "0x2d6f68",
+  "tabla": "FOREIGN"
  },
  "KeyHoldRight": {
   "firma": "void KeyHoldRight(int)",
-  "manejador": "0x2d7004"
+  "manejador": "0x2d7004",
+  "tabla": "FOREIGN"
  },
  "KeyHoldUp": {
   "firma": "void KeyHoldUp(int)",
-  "manejador": "0x2d70a0"
+  "manejador": "0x2d70a0",
+  "tabla": "FOREIGN"
  },
  "KeyLeft": {
   "firma": "void KeyLeft(int)",
-  "manejador": "0x2d6f34"
+  "manejador": "0x2d6f34",
+  "tabla": "FOREIGN"
  },
  "KeyMenu": {
   "firma": "void KeyMenu(int)",
-  "manejador": "0x2d7108"
+  "manejador": "0x2d7108",
+  "tabla": "FOREIGN"
  },
  "KeyMode": {
   "firma": "void KeyMode(int)",
-  "manejador": "0x2d713c"
+  "manejador": "0x2d713c",
+  "tabla": "FOREIGN"
  },
  "KeyOK": {
   "firma": "void KeyOK(int)",
-  "manejador": "0x2d7170"
+  "manejador": "0x2d7170",
+  "tabla": "FOREIGN"
  },
  "KeyQuality": {
   "firma": "void KeyQuality(int)",
-  "manejador": "0x2d71a4"
+  "manejador": "0x2d71a4",
+  "tabla": "FOREIGN"
  },
  "KeyReleaseDown": {
   "firma": "void KeyReleaseDown()",
-  "manejador": "0x2d6ef4"
+  "manejador": "0x2d6ef4",
+  "tabla": "FOREIGN"
  },
  "KeyReleaseLeft": {
   "firma": "void KeyReleaseLeft()",
-  "manejador": "0x2d6fc4"
+  "manejador": "0x2d6fc4",
+  "tabla": "FOREIGN"
  },
  "KeyReleaseRight": {
   "firma": "void KeyReleaseRight()",
-  "manejador": "0x2d7060"
+  "manejador": "0x2d7060",
+  "tabla": "FOREIGN"
  },
  "KeyReleaseUp": {
   "firma": "void KeyReleaseUp()",
-  "manejador": "0x2d70fc"
+  "manejador": "0x2d70fc",
+  "tabla": "FOREIGN"
  },
  "KeyReview": {
   "firma": "void KeyReview(int)",
-  "manejador": "0x2d71b8"
+  "manejador": "0x2d71b8",
+  "tabla": "FOREIGN"
  },
  "KeyRight": {
   "firma": "void KeyRight(int)",
-  "manejador": "0x2d6fd0"
+  "manejador": "0x2d6fd0",
+  "tabla": "FOREIGN"
  },
  "KeySelect": {
   "firma": "void KeySelect(int)",
-  "manejador": "0x2d71ec"
+  "manejador": "0x2d71ec",
+  "tabla": "FOREIGN"
  },
  "KeyShare": {
   "firma": "void KeyShare(int)",
-  "manejador": "0x2d7200"
+  "manejador": "0x2d7200",
+  "tabla": "FOREIGN"
  },
  "KeyTest": {
   "firma": "void KeyTest()",
-  "manejador": "0x2d7234"
+  "manejador": "0x2d7234",
+  "tabla": "FOREIGN"
  },
  "KeyTimer": {
   "firma": "void KeyTimer(int)",
-  "manejador": "0x2d7240"
+  "manejador": "0x2d7240",
+  "tabla": "FOREIGN"
  },
  "KeyTV": {
   "firma": "void KeyTV(int)",
-  "manejador": "0x2d7274"
+  "manejador": "0x2d7274",
+  "tabla": "FOREIGN"
  },
  "KeyUp": {
   "firma": "void KeyUp(int)",
-  "manejador": "0x2d706c"
+  "manejador": "0x2d706c",
+  "tabla": "FOREIGN"
  },
  "KeyUSB": {
   "firma": "void KeyUSB(int)",
-  "manejador": "0x2d7288"
+  "manejador": "0x2d7288",
+  "tabla": "FOREIGN"
  },
  "Language": {
   "firma": "void Language(int)",
-  "manejador": "0x2d729c"
+  "manejador": "0x2d729c",
+  "tabla": "FOREIGN"
  },
  "LCD_TypeSelect": {
   "firma": "int LCD_TypeSelect()",
-  "manejador": "0x2d72bc"
+  "manejador": "0x2d72bc",
+  "tabla": "FOREIGN"
  },
  "LCD_TypeSetup": {
   "firma": "int LCD_TypeSetup(int)",
-  "manejador": "0x2d72d4"
+  "manejador": "0x2d72d4",
+  "tabla": "FOREIGN"
  },
  "LCD_TypeGet": {
   "firma": "int LCD_TypeGet()",
-  "manejador": "0x2d7314"
+  "manejador": "0x2d7314",
+  "tabla": "FOREIGN"
  },
  "StrobeScript_SelectMenu": {
   "firma": "int StrobeScript_SelectMenu()",
-  "manejador": "0x2d7318"
+  "manejador": "0x2d7318",
+  "tabla": "FOREIGN"
  },
  "StrobeScript_SetType": {
   "firma": "int StrobeScript_SetType(int)",
-  "manejador": "0x2d7330"
+  "manejador": "0x2d7330",
+  "tabla": "FOREIGN"
  },
  "StrobeScript_GetType": {
   "firma": "int StrobeScript_GetType()",
-  "manejador": "0x2d7374"
+  "manejador": "0x2d7374",
+  "tabla": "FOREIGN"
  },
  "LCDOff": {
   "firma": "void LCDOff()",
-  "manejador": "0x2d7378"
+  "manejador": "0x2d7378",
+  "tabla": "FOREIGN"
  },
  "LCDOn": {
   "firma": "void LCDOn()",
-  "manejador": "0x2d737c"
+  "manejador": "0x2d737c",
+  "tabla": "FOREIGN"
  },
  "LCDRedrawEnable": {
   "firma": "void LCDRedrawEnable(int)",
-  "manejador": "0x2d7380"
+  "manejador": "0x2d7380",
+  "tabla": "FOREIGN"
  },
  "LCDScript_SetFixedBrightness": {
   "firma": "int LCDScript_SetFixedBrightness(str)",
-  "manejador": "0x2d73a8"
+  "manejador": "0x2d73a8",
+  "tabla": "FOREIGN"
  },
  "LCDVCom_Adjustment": {
   "firma": "int LCDVCom_Adjustment(int, int, int, int, int)",
-  "manejador": "0x2d73f8"
+  "manejador": "0x2d73f8",
+  "tabla": "FOREIGN"
  },
  "LedTest": {
   "firma": "int LedTest(int, int)",
-  "manejador": "0x2d7424"
+  "manejador": "0x2d7424",
+  "tabla": "FOREIGN"
  },
  "LensCali_EFA": {
   "firma": "int LensCali_EFA(int, int, int, int, int)",
-  "manejador": "0x2d7448"
+  "manejador": "0x2d7448",
+  "tabla": "FOREIGN"
  },
  "LensCali_Shutter": {
   "firma": "void LensCali_Shutter()",
-  "manejador": null,
+  "manejador": "0x2d6604",
   "tabla": "SYSTEM"
  },
  "LTExposure": {
   "firma": "void LTExposure(int)",
-  "manejador": "0x2d7480"
+  "manejador": "0x2d7480",
+  "tabla": "FOREIGN"
  },
  "MCUGetByte": {
   "firma": "int MCUGetByte(int)",
-  "manejador": "0x2d74e8"
+  "manejador": "0x2d74e8",
+  "tabla": "FOREIGN"
  },
  "MCUGetData": {
   "firma": "int MCUGetData(int)",
-  "manejador": "0x2d74a0"
+  "manejador": "0x2d74a0",
+  "tabla": "FOREIGN"
  },
  "MCUSetByte": {
   "firma": "int MCUSetByte(int, int)",
-  "manejador": "0x2d7518"
+  "manejador": "0x2d7518",
+  "tabla": "FOREIGN"
  },
  "MCUSetData": {
   "firma": "int MCUSetData(int, int)",
-  "manejador": "0x2d7500"
+  "manejador": "0x2d7500",
+  "tabla": "FOREIGN"
  },
  "Mode": {
   "firma": "void Mode(int)",
-  "manejador": "0x2d7530"
+  "manejador": "0x2d7530",
+  "tabla": "FOREIGN"
  },
  "OrientationSensor": {
   "firma": "void OrientationSensor(int)",
-  "manejador": "0x2d756c"
+  "manejador": "0x2d756c",
+  "tabla": "FOREIGN"
  },
  "PowerOff": {
   "firma": "int PowerOff(int, int)",
-  "manejador": "0x2d758c"
+  "manejador": "0x2d758c",
+  "tabla": "FOREIGN"
  },
  "PowerSaving": {
   "firma": "void PowerSaving(int)",
-  "manejador": "0x2d7638"
+  "manejador": "0x2d7638",
+  "tabla": "FOREIGN"
  },
  "Quality": {
   "firma": "void Quality(int)",
-  "manejador": "0x2d7660"
+  "manejador": "0x2d7660",
+  "tabla": "FOREIGN"
  },
  "Reboot": {
   "firma": "void Reboot(int)",
-  "manejador": "0x2d7680"
+  "manejador": "0x2d7680",
+  "tabla": "FOREIGN"
  },
  "RedEyePreflash": {
   "firma": "void RedEyePreflash(int)",
-  "manejador": "0x2d7700"
+  "manejador": "0x2d7700",
+  "tabla": "FOREIGN"
  },
  "Resolution": {
   "firma": "void Resolution(int)",
-  "manejador": "0x2d7720"
+  "manejador": "0x2d7720",
+  "tabla": "FOREIGN"
  },
  "SceneMode": {
   "firma": "void SceneMode(int)",
-  "manejador": "0x2d7740"
+  "manejador": "0x2d7740",
+  "tabla": "FOREIGN"
  },
  "ScreenInt32_Hex": {
   "firma": "void ScreenInt32_Hex(int, int, int)",
-  "manejador": "0x2d7760"
+  "manejador": "0x2d7760",
+  "tabla": "FOREIGN"
  },
  "ScriptSelfTest": {
   "firma": "int ScriptSelfTest()",
-  "manejador": "0x2d7fc0"
+  "manejador": "0x2d7fc0",
+  "tabla": "FOREIGN"
  },
  "DrawBackColor": {
   "firma": "void DrawBackColor(int, int, int, int, int, int, int, int)",
-  "manejador": "0x2d8030"
+  "manejador": "0x2d8030",
+  "tabla": "FOREIGN"
  },
  "SetFontColor": {
   "firma": "void SetFontColor(int, int, int, int)",
-  "manejador": "0x2d8084"
+  "manejador": "0x2d8084",
+  "tabla": "FOREIGN"
  },
  "SetVistaMode": {
   "firma": "void SetVistaMode(int)",
-  "manejador": "0x2d80b4"
+  "manejador": "0x2d80b4",
+  "tabla": "FOREIGN"
  },
  "ShutterClose": {
   "firma": "void ShutterClose()",
-  "manejador": "0x2d80d4"
+  "manejador": "0x2d80d4",
+  "tabla": "FOREIGN"
  },
  "SoundVolume": {
   "firma": "void SoundVolume(int)",
-  "manejador": "0x2d80d8"
+  "manejador": "0x2d80d8",
+  "tabla": "FOREIGN"
  },
  "SQLiteChk_TaskStop": {
   "firma": "int SQLiteChk_TaskStop()",
-  "manejador": "0x2d80f8"
+  "manejador": "0x2d80f8",
+  "tabla": "FOREIGN"
  },
  "StrobeReady": {
   "firma": "int StrobeReady()",
-  "manejador": null,
+  "manejador": "0x2d6618",
   "tabla": "SYSTEM"
  },
  "SwitchMode": {
   "firma": "void SwitchMode(int)",
-  "manejador": "0x2d8110"
+  "manejador": "0x2d8110",
+  "tabla": "FOREIGN"
  },
  "SwitchWindowByID": {
   "firma": "int SwitchWindowByID(int, int)",
-  "manejador": "0x2d8164"
+  "manejador": "0x2d8164",
+  "tabla": "FOREIGN"
  },
  "TakeVideo": {
   "firma": "void TakeVideo(int)",
-  "manejador": "0x2d8198"
+  "manejador": "0x2d8198",
+  "tabla": "FOREIGN"
  },
  "TemperatureEnable": {
   "firma": "void TemperatureEnable(int)",
-  "manejador": "0x2d6cbc"
+  "manejador": "0x2d6cbc",
+  "tabla": "FOREIGN"
  },
  "TV_NTSCPAL_Test": {
   "firma": "void TV_NTSCPAL_Test()",
-  "manejador": "0x2d81c8"
+  "manejador": "0x2d81c8",
+  "tabla": "FOREIGN"
  },
  "UpdateFW": {
   "firma": "int UpdateFW(int, str)",
-  "manejador": "0x2d81cc"
+  "manejador": "0x2d81cc",
+  "tabla": "FOREIGN"
  },
  "UploadCali": {
   "firma": "void UploadCali(str)",
-  "manejador": "0x2d8200"
+  "manejador": "0x2d8200",
+  "tabla": "FOREIGN"
  },
  "USBDevModeSwitch": {
   "firma": "void USBDevModeSwitch(int)",
-  "manejador": "0x2d8220"
+  "manejador": "0x2d8220",
+  "tabla": "FOREIGN"
  },
  "VideoOut": {
   "firma": "void VideoOut(int)",
-  "manejador": "0x2d8250"
+  "manejador": "0x2d8250",
+  "tabla": "FOREIGN"
  },
  "Wait_OK_Key": {
   "firma": "void Wait_OK_Key(int)",
-  "manejador": "0x2d8284"
+  "manejador": "0x2d8284",
+  "tabla": "FOREIGN"
  },
  "WBMode": {
   "firma": "void WBMode(int)",
-  "manejador": "0x2d82a4"
+  "manejador": "0x2d82a4",
+  "tabla": "FOREIGN"
  },
  "Zoom": {
   "firma": "void Zoom(int)",
-  "manejador": "0x2d82c4"
+  "manejador": "0x2d82c4",
+  "tabla": "FOREIGN"
  },
  "ResetLCDPwrSave": {
   "firma": "void ResetLCDPwrSave(int)",
-  "manejador": "0x2d82e4"
+  "manejador": "0x2d82e4",
+  "tabla": "FOREIGN"
  },
  "UpdateCDROMImage": {
   "firma": "int UpdateCDROMImage()",
-  "manejador": "0x2d831c"
+  "manejador": "0x2d831c",
+  "tabla": "FOREIGN"
  },
  "AEAWB_ISO100Calibration": {
   "firma": "int AEAWB_ISO100Calibration(int, int, int, int, int, int, int)",
-  "manejador": "0x2d8324"
+  "manejador": "0x2d8324",
+  "tabla": "FOREIGN"
  },
  "AcessClampAndOffset": {
   "firma": "void AcessClampAndOffset(int)",
-  "manejador": "0x2d8358"
+  "manejador": "0x2d8358",
+  "tabla": "FOREIGN"
  },
  "SaveCFAonTake": {
   "firma": "void SaveCFAonTake(int)",
-  "manejador": "0x2d8378"
+  "manejador": "0x2d8378",
+  "tabla": "FOREIGN"
  },
  "SaveCFAonIRP": {
   "firma": "void SaveCFAonIRP(int)",
-  "manejador": "0x2d83a0"
+  "manejador": "0x2d83a0",
+  "tabla": "FOREIGN"
  },
  "Take12BitCCDRaw": {
   "firma": "void Take12BitCCDRaw(int)",
-  "manejador": "0x2d83c0"
+  "manejador": "0x2d83c0",
+  "tabla": "FOREIGN"
  },
  "EnableS1ImgSaving": {
   "firma": "void EnableS1ImgSaving(int)",
-  "manejador": "0x2d83ec"
+  "manejador": "0x2d83ec",
+  "tabla": "FOREIGN"
  },
  "SetAdGain": {
   "firma": "void SetAdGain(int, int)",
-  "manejador": "0x2d840c"
+  "manejador": "0x2d840c",
+  "tabla": "FOREIGN"
  },
  "SetAeTargetMean": {
   "firma": "void SetAeTargetMean(int)",
-  "manejador": "0x2d8444"
+  "manejador": "0x2d8444",
+  "tabla": "FOREIGN"
  },
  "SetBrightnessValue": {
   "firma": "void SetBrightnessValue(int, int)",
-  "manejador": "0x2d8464"
+  "manejador": "0x2d8464",
+  "tabla": "FOREIGN"
  },
  "SetExposureTime": {
   "firma": "void SetExposureTime(int, int)",
-  "manejador": "0x2d849c"
+  "manejador": "0x2d849c",
+  "tabla": "FOREIGN"
  },
  "SetIrisIndex": {
   "firma": "void SetIrisIndex(int, int)",
-  "manejador": "0x2d84d4"
+  "manejador": "0x2d84d4",
+  "tabla": "FOREIGN"
  },
  "SetIsoSpeed": {
   "firma": "void SetIsoSpeed(int, int)",
-  "manejador": "0x2d850c"
+  "manejador": "0x2d850c",
+  "tabla": "FOREIGN"
  },
  "AELinearityTest": {
   "firma": "void AELinearityTest(int)",
-  "manejador": "0x2d8544"
+  "manejador": "0x2d8544",
+  "tabla": "FOREIGN"
  },
  "AEscript": {
   "firma": "int AEscript(int, int, int, int, int, int, int)",
-  "manejador": "0x2d8564"
+  "manejador": "0x2d8564",
+  "tabla": "FOREIGN"
  },
  "WriteClampAndOffsetToFlash": {
   "firma": "int WriteClampAndOffsetToFlash(int, int, int, int, int, int, int)",
-  "manejador": "0x2d85b4"
+  "manejador": "0x2d85b4",
+  "tabla": "FOREIGN"
  },
  "DisableS0S1AS": {
   "firma": "void DisableS0S1AS()",
-  "manejador": "0x2d85e8"
+  "manejador": "0x2d85e8",
+  "tabla": "FOREIGN"
  },
  "AF_TestMode": {
   "firma": "int AF_TestMode(int, int, int, int)",
-  "manejador": "0x2d8604"
+  "manejador": "0x2d8604",
+  "tabla": "FOREIGN"
  },
  "CBBP": {
   "firma": "int CBBP(int, int, int, int, int, int)",
-  "manejador": "0x2d9298"
+  "manejador": "0x2d9298",
+  "tabla": "FOREIGN"
  },
  "CWBP": {
   "firma": "int CWBP(int, int, int, int, int, int, int)",
-  "manejador": "0x2d92e4"
+  "manejador": "0x2d92e4",
+  "tabla": "FOREIGN"
  },
  "ImgCap_LightBoxCalibration": {
   "firma": "void ImgCap_LightBoxCalibration(int)",
-  "manejador": "0x2d9338"
+  "manejador": "0x2d9338",
+  "tabla": "FOREIGN"
  },
  "ImgCap_WhitePointCalibration": {
   "firma": "void ImgCap_WhitePointCalibration(int)",
-  "manejador": "0x2d934c"
+  "manejador": "0x2d934c",
+  "tabla": "FOREIGN"
  },
  "ICC_Perf_Log_Switch": {
   "firma": "void ICC_Perf_Log_Switch(int, int, int, int, int, int)",
-  "manejador": "0x2d9360"
+  "manejador": "0x2d9360",
+  "tabla": "FOREIGN"
  },
  "ICC_Download_HW3A_Data_Switch": {
   "firma": "void ICC_Download_HW3A_Data_Switch(int, int, int, int, int, int)",
-  "manejador": "0x2d9390"
+  "manejador": "0x2d9390",
+  "tabla": "FOREIGN"
  },
  "SetShadingCalibrMode": {
   "firma": "int SetShadingCalibrMode(int, int, int, int, int, int, int, int, int, int)",
-  "manejador": "0x2d93c0"
+  "manejador": "0x2d93c0",
+  "tabla": "FOREIGN"
  },
  "SetShadingCalibrExp": {
   "firma": "int SetShadingCalibrExp(int, int, int, int, int, int, int, int, int, int)",
-  "manejador": "0x2d9434"
+  "manejador": "0x2d9434",
+  "tabla": "FOREIGN"
  },
  "SetShadingCalibrTarget": {
   "firma": "int SetShadingCalibrTarget(int, int, int, int, int, int, int, int, int, int)",
-  "manejador": "0x2d94a0"
+  "manejador": "0x2d94a0",
+  "tabla": "FOREIGN"
  },
  "RunShadingCalibr": {
   "firma": "int RunShadingCalibr(int, int, int)",
-  "manejador": "0x2d950c"
+  "manejador": "0x2d950c",
+  "tabla": "FOREIGN"
  },
  "EnableFRShadingComp": {
   "firma": "void EnableFRShadingComp()",
-  "manejador": "0x2d9550"
+  "manejador": "0x2d9550",
+  "tabla": "FOREIGN"
  },
  "DisableFRShadingComp": {
   "firma": "void DisableFRShadingComp()",
-  "manejador": "0x2d9558"
+  "manejador": "0x2d9558",
+  "tabla": "FOREIGN"
  },
  "EnableLVShadingComp": {
   "firma": "void EnableLVShadingComp()",
-  "manejador": "0x2d9560"
+  "manejador": "0x2d9560",
+  "tabla": "FOREIGN"
  },
  "DisableLVShadingComp": {
   "firma": "void DisableLVShadingComp()",
-  "manejador": "0x2d9568"
+  "manejador": "0x2d9568",
+  "tabla": "FOREIGN"
  },
  "DumpShadingLUT": {
   "firma": "int DumpShadingLUT(int, int)",
-  "manejador": "0x2d9570"
+  "manejador": "0x2d9570",
+  "tabla": "FOREIGN"
  },
  "AEAWB_GetBigSmallFactoryMode": {
   "firma": "int AEAWB_GetBigSmallFactoryMode()",
-  "manejador": "0x2d9598"
+  "manejador": "0x2d9598",
+  "tabla": "FOREIGN"
  },
  "SetFlashTime": {
   "firma": "void SetFlashTime(int)",
-  "manejador": "0x2d959c"
+  "manejador": "0x2d959c",
+  "tabla": "FOREIGN"
  },
  "SetWhitePoint": {
   "firma": "void SetWhitePoint(int, int, int)",
-  "manejador": "0x2d95c8"
+  "manejador": "0x2d95c8",
+  "tabla": "FOREIGN"
  },
  "ToneCCM_SetLCDtone": {
   "firma": "void ToneCCM_SetLCDtone(int, str)",
-  "manejador": "0x2d9930"
+  "manejador": "0x2d9930",
+  "tabla": "FOREIGN"
  },
  "ToneCCM_SetPCtone": {
   "firma": "void ToneCCM_SetPCtone(int, str)",
-  "manejador": "0x2d9a90"
+  "manejador": "0x2d9a90",
+  "tabla": "FOREIGN"
  },
  "ToneCCM_SetPCInversetone": {
   "firma": "void ToneCCM_SetPCInversetone(int, str)",
-  "manejador": "0x2d9b0c"
+  "manejador": "0x2d9b0c",
+  "tabla": "FOREIGN"
  },
  "ToneCCM_SetCCM": {
   "firma": "void ToneCCM_SetCCM(int, int, str)",
-  "manejador": "0x2d9b4c"
+  "manejador": "0x2d9b4c",
+  "tabla": "FOREIGN"
  },
  "ToneCCM_WriteLCDTable2Nflash": {
   "firma": "void ToneCCM_WriteLCDTable2Nflash(int, str)",
-  "manejador": "0x2d9be4"
+  "manejador": "0x2d9be4",
+  "tabla": "FOREIGN"
  },
  "OneCardTest": {
   "firma": "void OneCardTest(int)",
-  "manejador": "0x2bd7c8"
+  "manejador": "0x2bd7c8",
+  "tabla": "FOREIGN"
  },
  "OneCard_FlgSet": {
   "firma": "int OneCard_FlgSet(int)",
-  "manejador": "0x2bd704"
+  "manejador": "0x2bd704",
+  "tabla": "FOREIGN"
  },
  "OneCard_CompletePrint": {
   "firma": "void OneCard_CompletePrint()",
-  "manejador": "0x2d9bf8"
+  "manejador": "0x2d9bf8",
+  "tabla": "FOREIGN"
  },
  "OneCard_ErrCodePrint": {
   "firma": "void OneCard_ErrCodePrint(int)",
-  "manejador": "0x2d9c0c"
+  "manejador": "0x2d9c0c",
+  "tabla": "FOREIGN"
  },
  "OneCard_ErrPrint": {
   "firma": "int OneCard_ErrPrint(str)",
-  "manejador": "0x2bd7f4"
+  "manejador": "0x2bd7f4",
+  "tabla": "FOREIGN"
  },
  "OneCard_ExtIndex": {
   "firma": "int OneCard_ExtIndex()",
-  "manejador": "0x2d9c38"
+  "manejador": "0x2d9c38",
+  "tabla": "FOREIGN"
  },
  "OneCard_IsAllStationPASS": {
   "firma": "int OneCard_IsAllStationPASS()",
-  "manejador": "0x2d9c3c"
+  "manejador": "0x2d9c3c",
+  "tabla": "FOREIGN"
  },
  "OneCard_IsInOneCardMode": {
   "firma": "int OneCard_IsInOneCardMode()",
-  "manejador": "0x2d9c54"
+  "manejador": "0x2d9c54",
+  "tabla": "FOREIGN"
  },
  "OneCard_SetIsInOneCardMode": {
   "firma": "void OneCard_SetIsInOneCardMode(int)",
-  "manejador": "0x2d9c58"
+  "manejador": "0x2d9c58",
+  "tabla": "FOREIGN"
  },
  "OneCard_RunIn": {
   "firma": "int OneCard_RunIn(int, int, int, int, int, int, int)",
-  "manejador": "0x2d9c80"
+  "manejador": "0x2d9c80",
+  "tabla": "FOREIGN"
  },
  "OneCard_TVTest": {
   "firma": "int OneCard_TVTest(int, int)",
-  "manejador": "0x2d9cb4"
+  "manejador": "0x2d9cb4",
+  "tabla": "FOREIGN"
  },
  "OneCard_RepairmanManualReset": {
   "firma": "int OneCard_RepairmanManualReset(int)",
-  "manejador": "0x2d9cd8"
+  "manejador": "0x2d9cd8",
+  "tabla": "FOREIGN"
  },
  "OneCard_RunScriptInit": {
   "firma": "void OneCard_RunScriptInit()",
-  "manejador": "0x2d9d88"
+  "manejador": "0x2d9d88",
+  "tabla": "FOREIGN"
  },
  "OneCard_PJCommonInit": {
   "firma": "void OneCard_PJCommonInit()",
-  "manejador": "0x2d9d8c"
+  "manejador": "0x2d9d8c",
+  "tabla": "FOREIGN"
  },
  "OneCard_ShowVer": {
   "firma": "int OneCard_ShowVer(int, str)",
-  "manejador": "0x2d9d90"
+  "manejador": "0x2d9d90",
+  "tabla": "FOREIGN"
  },
  "OneCard_SetBkModialMode": {
   "firma": "void OneCard_SetBkModialMode(int)",
-  "manejador": "0x2d9fc4"
+  "manejador": "0x2d9fc4",
+  "tabla": "FOREIGN"
  },
  "Review_GetFileType_Script": {
   "firma": "int Review_GetFileType_Script()",
-  "manejador": "0x2d9fe4"
+  "manejador": "0x2d9fe4",
+  "tabla": "FOREIGN"
  },
  "OneCard_GetProjectID": {
   "firma": "int OneCard_GetProjectID()",
-  "manejador": "0x2da018"
+  "manejador": "0x2da018",
+  "tabla": "FOREIGN"
  },
  "ModelNameChange": {
   "firma": "void ModelNameChange(int)",
-  "manejador": "0x2da01c"
+  "manejador": "0x2da01c",
+  "tabla": "FOREIGN"
  },
  "ModuleNameShow": {
   "firma": "void ModuleNameShow()",
-  "manejador": "0x2da03c"
+  "manejador": "0x2da03c",
+  "tabla": "FOREIGN"
  },
  "LENS_LensModuleValidation": {
   "firma": "int LENS_LensModuleValidation(int, int, int, int, int, int, int)",
-  "manejador": "0x2da05c"
+  "manejador": "0x2da05c",
+  "tabla": "FOREIGN"
  },
  "CCD_CCDModuleValidation": {
   "firma": "int CCD_CCDModuleValidation(int, int, int, int, int, int, int)",
-  "manejador": "0x2da090"
+  "manejador": "0x2da090",
+  "tabla": "FOREIGN"
  },
  "Run_SpecifyFunc": {
   "firma": "int Run_SpecifyFunc(int, int, int, int, int, int, int, int, int)",
-  "manejador": "0x2da0c4"
+  "manejador": "0x2da0c4",
+  "tabla": "FOREIGN"
  },
  "CCDLinearityTest": {
   "firma": "void CCDLinearityTest(int, int, int, int, int, int, int)",
-  "manejador": "0x2da318"
+  "manejador": "0x2da318",
+  "tabla": "FOREIGN"
  },
  "ETLinearity": {
   "firma": "void ETLinearity(int, int, int, int, int, int, int)",
-  "manejador": "0x2da360"
+  "manejador": "0x2da360",
+  "tabla": "FOREIGN"
  },
  "SetIsoStartDigiGain": {
   "firma": "void SetIsoStartDigiGain(int)",
-  "manejador": "0x2da394"
+  "manejador": "0x2da394",
+  "tabla": "FOREIGN"
  },
  "VL_DETECT": {
   "firma": "int VL_DETECT(int, int, int, int, int, int)",
-  "manejador": "0x2da3b4"
+  "manejador": "0x2da3b4",
+  "tabla": "FOREIGN"
  },
  "ShowCaliData": {
   "firma": "void ShowCaliData(int)",
-  "manejador": "0x2da3fc"
+  "manejador": "0x2da3fc",
+  "tabla": "FOREIGN"
  },
  "VLVideoCalibration": {
   "firma": "int VLVideoCalibration(int, int, int)",
-  "manejador": "0x2da424"
+  "manejador": "0x2da424",
+  "tabla": "FOREIGN"
  },
  "BatteryLife_QV_Dimmer_Time": {
   "firma": "int BatteryLife_QV_Dimmer_Time(int, int)",
-  "manejador": "0x2da43c"
+  "manejador": "0x2da43c",
+  "tabla": "FOREIGN"
  },
  "SetALCPara": {
   "firma": "void SetALCPara(int, int, int, int, int, int, int, int, int)",
-  "manejador": "0x2da470"
+  "manejador": "0x2da470",
+  "tabla": "FOREIGN"
  },
  "EnableGetLastBatInsuffCase": {
   "firma": "void EnableGetLastBatInsuffCase()",
-  "manejador": "0x2d684c"
+  "manejador": "0x2d684c",
+  "tabla": "FOREIGN"
  },
  "OIS_Validation": {
   "firma": "int OIS_Validation(int, int, int, int)",
-  "manejador": "0x2da4d8"
+  "manejador": "0x2da4d8",
+  "tabla": "FOREIGN"
  },
  "LensCali_Zoom_Main": {
   "firma": "int LensCali_Zoom_Main()",
-  "manejador": "0x2da4f4"
+  "manejador": "0x2da4f4",
+  "tabla": "FOREIGN"
  },
  "LensCali_Get_ZoomCtCpBacklashDone": {
   "firma": "int LensCali_Get_ZoomCtCpBacklashDone()",
-  "manejador": "0x2da4f8"
+  "manejador": "0x2da4f8",
+  "tabla": "FOREIGN"
  },
  "LensCali_BackDoor": {
   "firma": "int LensCali_BackDoor(int, int)",
-  "manejador": "0x2da52c"
+  "manejador": "0x2da52c",
+  "tabla": "FOREIGN"
  },
  "JSizeTrainning": {
   "firma": "int JSizeTrainning(int, int, int, int, int, int)",
-  "manejador": "0x2da550"
+  "manejador": "0x2da550",
+  "tabla": "FOREIGN"
  },
  "NANDScript_ExecuteCmd": {
   "firma": "int NANDScript_ExecuteCmd(int)",
-  "manejador": "0x2da890"
+  "manejador": "0x2da890",
+  "tabla": "FOREIGN"
  },
  "NANDScriptEx_ExecuteCmd": {
   "firma": "int NANDScriptEx_ExecuteCmd(int, int, int, int, int)",
-  "manejador": "0x2da5b4"
+  "manejador": "0x2da5b4",
+  "tabla": "FOREIGN"
  },
  "FileSysTest": {
   "firma": "int FileSysTest(int, int, str, str)",
-  "manejador": "0x2da938"
+  "manejador": "0x2da938",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SaveEnvironment": {
   "firma": "void ImgCap_SaveEnvironment(int)",
-  "manejador": "0x2db9b0"
+  "manejador": "0x2db9b0",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SetAperture": {
   "firma": "void ImgCap_SetAperture(int)",
-  "manejador": "0x2db9c4"
+  "manejador": "0x2db9c4",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SetExposureTime": {
   "firma": "void ImgCap_SetExposureTime(int)",
-  "manejador": "0x2db9d8"
+  "manejador": "0x2db9d8",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SetFlashTime": {
   "firma": "void ImgCap_SetFlashTime(int)",
-  "manejador": "0x2db9ec"
+  "manejador": "0x2db9ec",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SetFocusPosition": {
   "firma": "void ImgCap_SetFocusPosition(int)",
-  "manejador": "0x2dba00"
+  "manejador": "0x2dba00",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SetISO100Gain": {
   "firma": "void ImgCap_SetISO100Gain(int)",
-  "manejador": "0x2dba14"
+  "manejador": "0x2dba14",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SetISOSpeed": {
   "firma": "void ImgCap_SetISOSpeed(int)",
-  "manejador": "0x2dba28"
+  "manejador": "0x2dba28",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_SetTargetValue": {
   "firma": "void ImgCap_SetTargetValue(int)",
-  "manejador": "0x2dba3c"
+  "manejador": "0x2dba3c",
+  "tabla": "DEBUGGING"
  },
  "ImgCap_ShowEnvironment": {
   "firma": "void ImgCap_ShowEnvironment(int)",
-  "manejador": "0x2dba50"
+  "manejador": "0x2dba50",
+  "tabla": "DEBUGGING"
  },
  "IRP_SaveNoCompressImg": {
   "firma": "void IRP_SaveNoCompressImg()",
-  "manejador": "0x2dba64"
+  "manejador": "0x2dba64",
+  "tabla": "DEBUGGING"
  },
  "IRP_EnableShade": {
   "firma": "int IRP_EnableShade(int, int, int, int)",
-  "manejador": "0x2dba78"
+  "manejador": "0x2dba78",
+  "tabla": "DEBUGGING"
  },
  "IRP_DisableShade": {
   "firma": "int IRP_DisableShade()",
-  "manejador": "0x2dbaa0"
+  "manejador": "0x2dbaa0",
+  "tabla": "DEBUGGING"
  },
  "IRP_SetDenoiseTH": {
   "firma": "void IRP_SetDenoiseTH(int)",
-  "manejador": "0x2dbaac"
+  "manejador": "0x2dbaac",
+  "tabla": "DEBUGGING"
  },
  "IRP_SetEdgeEnhanceLUT": {
   "firma": "void IRP_SetEdgeEnhanceLUT(int)",
-  "manejador": "0x2dbac0"
+  "manejador": "0x2dbac0",
+  "tabla": "DEBUGGING"
  },
  "delay_us": {
   "firma": "void delay_us(int)",
@@ -836,157 +1041,157 @@
  },
  "FileSys_Test": {
   "firma": "int FileSys_Test(int, int, str, str)",
-  "manejador": null,
+  "manejador": "0x2d5a7c",
   "tabla": "SYSTEM"
  },
  "FlashFire": {
   "firma": "void FlashFire(int)",
-  "manejador": null,
+  "manejador": "0x2d6594",
   "tabla": "SYSTEM"
  },
  "GetDateTimeValue": {
   "firma": "int GetDateTimeValue(int)",
-  "manejador": null,
+  "manejador": "0x2d65ac",
   "tabla": "SYSTEM"
  },
  "GetSystemDateTime": {
   "firma": "int GetSystemDateTime()",
-  "manejador": null,
+  "manejador": "0x2d659c",
   "tabla": "SYSTEM"
  },
  "LCD": {
   "firma": "void LCD(int)",
-  "manejador": null,
+  "manejador": "0x2d65f0",
   "tabla": "SYSTEM"
  },
  "MemRead": {
   "firma": "int MemRead(int)",
-  "manejador": null,
+  "manejador": "0x2d6608",
   "tabla": "SYSTEM"
  },
  "MemWrite": {
   "firma": "void MemWrite(int, int)",
-  "manejador": null,
+  "manejador": "0x2d660c",
   "tabla": "SYSTEM"
  },
  "PerfmMgr_Enable": {
   "firma": "void PerfmMgr_Enable(int)",
-  "manejador": null,
+  "manejador": "0x2d6610",
   "tabla": "SYSTEM"
  },
  "PerfmMgr_Output": {
   "firma": "void PerfmMgr_Output()",
-  "manejador": null,
+  "manejador": "0x2d6614",
   "tabla": "SYSTEM"
  },
  "ScreenInt32": {
   "firma": "void ScreenInt32(int, int, int)",
-  "manejador": null,
+  "manejador": "0x2d662c",
   "tabla": "SYSTEM"
  },
  "ScreenFloat32": {
   "firma": "void ScreenFloat32(int, int, float)",
-  "manejador": null,
+  "manejador": "0x2d6640",
   "tabla": "SYSTEM"
  },
  "ScreenString": {
   "firma": "void ScreenString(int, int, str)",
-  "manejador": null,
+  "manejador": "0x2d6644",
   "tabla": "SYSTEM"
  },
  "KeyEventDisable": {
   "firma": "void KeyEventDisable()",
-  "manejador": null,
+  "manejador": "0xe26c8",
   "tabla": "SYSTEM"
  },
  "KeyEventEnable": {
   "firma": "void KeyEventEnable()",
-  "manejador": null,
+  "manejador": "0xe26d0",
   "tabla": "SYSTEM"
  },
  "KeyHoldS1": {
   "firma": "void KeyHoldS1(int)",
-  "manejador": null,
+  "manejador": "0x2d6658",
   "tabla": "SYSTEM"
  },
  "KeyHoldS2": {
   "firma": "void KeyHoldS2(int)",
-  "manejador": null,
+  "manejador": "0x2d6664",
   "tabla": "SYSTEM"
  },
  "KeyHoldTele": {
   "firma": "void KeyHoldTele(int)",
-  "manejador": null,
+  "manejador": "0x2d6670",
   "tabla": "SYSTEM"
  },
  "KeyHoldWide": {
   "firma": "void KeyHoldWide(int)",
-  "manejador": null,
+  "manejador": "0x2d667c",
   "tabla": "SYSTEM"
  },
  "KeyPowerOff": {
   "firma": "void KeyPowerOff(int)",
-  "manejador": null,
+  "manejador": "0x2d6688",
   "tabla": "SYSTEM"
  },
  "KeyReleaseS1": {
   "firma": "void KeyReleaseS1(int)",
-  "manejador": null,
+  "manejador": "0x2d668c",
   "tabla": "SYSTEM"
  },
  "KeyReleaseS2": {
   "firma": "void KeyReleaseS2(int)",
-  "manejador": null,
+  "manejador": "0x2d6698",
   "tabla": "SYSTEM"
  },
  "KeyReleaseTele": {
   "firma": "void KeyReleaseTele(int)",
-  "manejador": null,
+  "manejador": "0x2d66a4",
   "tabla": "SYSTEM"
  },
  "KeyReleaseWide": {
   "firma": "void KeyReleaseWide(int)",
-  "manejador": null,
+  "manejador": "0x2d66b0",
   "tabla": "SYSTEM"
  },
  "KeyStateGet": {
   "firma": "int KeyStateGet(int)",
-  "manejador": null,
+  "manejador": "0x2d66bc",
   "tabla": "SYSTEM"
  },
  "KeyTele": {
   "firma": "void KeyTele(int)",
-  "manejador": null,
+  "manejador": "0x2d66c4",
   "tabla": "SYSTEM"
  },
  "KeyWide": {
   "firma": "void KeyWide(int)",
-  "manejador": null,
+  "manejador": "0x2d66e4",
   "tabla": "SYSTEM"
  },
  "DebugMsgLog": {
   "firma": "void DebugMsgLog(int)",
-  "manejador": null,
+  "manejador": "0x2d6704",
   "tabla": "SYSTEM"
  },
  "Time_End": {
   "firma": "int Time_End()",
-  "manejador": null,
+  "manejador": "0x2d6708",
   "tabla": "SYSTEM"
  },
  "Time_FreeBuffer": {
   "firma": "void Time_FreeBuffer()",
-  "manejador": null,
+  "manejador": "0x2d672c",
   "tabla": "SYSTEM"
  },
  "Time_GetPeriod": {
   "firma": "int Time_GetPeriod(int, int, int)",
-  "manejador": null,
+  "manejador": "0x2d6730",
   "tabla": "SYSTEM"
  },
  "Time_Set": {
   "firma": "int Time_Set(int)",
-  "manejador": null,
+  "manejador": "0x2d6774",
   "tabla": "SYSTEM"
  }
 }
