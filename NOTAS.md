@@ -108,7 +108,17 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
 - **Arranque:** la pantalla de inicio (tabla de eventos `0x4706d8`, junto a las cadenas
   `B:\DISABLE_AUTO_POWER_OFF` etc.) atiende el evento `0x7c0a` en `0x1fdff4`, que en `0x1fe1dc`
   llama a `0x2bee0c("B:")` → `0x53e44` → ejecuta `B:\Batch\BatchScripts.txt` si existe.
-  Hipótesis fuerte, sin probar en cámara: un script en la SD corre solo al encender.
+  **Corrección y verificación con el decompilador (Ghidra):** la llamada en `0x1fe1dc` pertenece al
+  manejador del evento `0x7c0b` (`0x1fe124`, arranque), no al de `0x7c0a`. Ese manejador llama a
+  `0x2bee0c("B:")` en cada encendido normal, salvo si hay una entrada especial pendiente
+  (`0x107c98(0, 0x3301, 1)`) o un modo especial (`0x11d95c`). `0x2bee0c` reserva 128 KB y llama a
+  `0x53e44`, que abre `B:\Batch\BatchScripts.txt` y, si existe, lo encola al hilo de scripts.
+  Falta sólo confirmarlo en la cámara (sondas del kit fase 1).
+- `Run_SpecifyFunc(f, nargs, outpos, a1..a6)` verificado con el decompilador: con outpos = 0
+  devuelve `f(a1, …)`.
+- Caché: hay caché de datos (`dc_ctrl/dc_ivdl/dc_fldl`) y ninguna operación de caché de
+  instrucciones. `dcache_flush_range(addr, len)` = `0x24e140`, `dcache_inval_range` = `0x24e108`.
+  Los parches de código en RAM (`tools/patch2srt.py`) vacían la caché tras escribir.
   Rollback de esa vía: borrar el archivo y reiniciar (sólo toca RAM).
 - `B:\Batch\Reset.srt` lo corre `0x2bd950` con OK (evento 0x580) en otra pantalla (tabla 0x489fd0).
 - Pendiente: sintaxis exacta del .txt/.srt (parser en torno a `0x1078d8`, `0x1062e0`).
