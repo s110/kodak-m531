@@ -63,52 +63,98 @@ def desempaquetar(datos: bytes, packing: str, n: int | None = None) -> np.ndarra
 
 
 # ---------------------------------------------------------------- detección
-def _autocorr_pico(x: np.ndarray, lag_min: int, lag_max: int):
+def _autocorr(x: np.ndarray, lag_max: int):
     x = x.astype(np.float64)
     x -= x.mean()
     if not x.std():
-        return 0.0, 0, 0.0
-    nfft = 1 << int(np.ceil(np.log2(2 * len(x))))
+        return None
+    nfft = 1 << int(np.ceil(np.log2(len(x) + lag_max + 1)))
     f = np.fft.rfft(x, nfft)
     ac = np.fft.irfft(f * np.conj(f), nfft)[:lag_max + 1]
-    ac /= ac[0]
-    seg = ac[lag_min:lag_max + 1]
-    k = int(np.argmax(seg))
-    pico = float(seg[k])
-    lag = lag_min + k
-    # preferir el menor múltiplo: si lag/2 o lag/3 tienen un pico casi igual, el ancho es ese
-    for div in (3, 2):
-        l2 = lag // div
-        if l2 >= lag_min and lag % div == 0:
-            vec = ac[max(l2 - 1, 0):l2 + 2]
-            if vec.max() >= 0.9 * pico:
-                lag = l2 - 1 + int(np.argmax(vec))
-    return pico, lag, float(ac[2])
+    return ac / ac[0]
 
 
-def detectar_formato(datos: bytes, ancho_min=1500, ancho_max=7000, muestra=3_000_000):
+def _prominencia(ac, l):
+    """Cuánto sobresale ac en l (o l±1) sobre su entorno (±3..±12)."""
+    if l - 12 < 0 or l + 13 > len(ac):
+        return 0.0
+    centro = ac[l - 1:l + 2].max()
+    entorno = np.concatenate([ac[l - 12:l - 2], ac[l + 3:l + 13]])
+    return float(centro - np.median(entorno))
+
+
+def _ancho_desde_ac(ac, ancho_min, ancho_max):
+    """Ancho de fila a partir de la autocorrelación, sin confundir colores del Bayer.
+
+    En un mosaico completo, el desfase de una fila (W) compara filas de colores distintos y el
+    de dos filas (2W) compara el mismo color. En un campo de un CCD entrelazado (sólo filas de un
+    tipo), ya W compara el mismo color. Se busca el mayor pico en desfases pares de [min, 2·max]
+    y se decide: si L/2 también es un pico marcado, el ancho es L/2 (mosaico completo); si no, L.
+    """
+    lags = np.arange(ancho_min - ancho_min % 2, min(2 * ancho_max, len(ac) - 13) + 1, 2)
+    L = int(lags[np.argmax(ac[lags])])
+    pico = float(ac[L])
+    W = L
+    if L // 2 >= ancho_min and _prominencia(ac, L // 2) >= 0.3 * max(_prominencia(ac, L), 1e-6):
+        W = L // 2
+    if W > ancho_max:
+        W = L // 2  # nunca devolver un ancho fuera de rango
+    return pico, W
+
+
+def detectar_formato(datos: bytes, ancho_min=1500, ancho_max=7000, muestra=4_000_000):
     res = []
     for packing, b in FORMATOS:
         px = desempaquetar(datos, packing, muestra)
-        if len(px) < 3 * ancho_max:
+        if len(px) < 3 * 2 * ancho_max:
             continue
         # empezar lejos del borde superior (negro óptico, filas de basura)
         ini = len(px) // 4
-        pico, lag, vecino = _autocorr_pico(px[ini:], ancho_min, ancho_max)
-        # castigo a formatos que dejan bits altos vacíos o saturan raro
+        x = px[ini:].astype(np.float64)
+        ac_bruta = _autocorr(x[:400_000], 4)
+        # para el ancho: diferencia horizontal entre píxeles del mismo color. Quita los gradientes
+        # amplios de la escena (que correlacionan a cualquier distancia) y deja los bordes, que sí
+        # se alinean de una fila a la siguiente.
+        ac = _autocorr(x[2:] - x[:-2], 2 * ancho_max + 16)
+        if ac is None or ac_bruta is None:
+            continue
+        pico, ancho = _ancho_desde_ac(ac, ancho_min, ancho_max)
+        vecino = float(ac_bruta[2])
         vals = px[ini:ini + 200_000]
         usado = int(vals.max()).bit_length()
         # el ancho correcto da pico vertical; el empaquetado correcto, además, vecinos del mismo
         # color (desfase 2) parecidos. Un empaquetado equivocado mezcla bits y rompe lo segundo.
-        puntaje = pico * max(vecino, 0.0)
+        puntaje = pico * max(vecino, 0.0) ** 4
         # Un contenedor de 16 bits guarda datos de 12–14 bits: los dos bits altos quedan vacíos.
         # Si se llenan, lo más probable es que sean dos píxeles de 8 bits leídos como uno.
         if b == 16 and usado > 14:
-            puntaje *= 0.5
-        res.append(dict(packing=packing, bits=b, ancho=lag, pico=round(pico, 4), vecino=round(vecino, 4),
+            puntaje *= 0.05  # ningún sensor de 12–14 bits llena los 16: casi seguro son 8 bits
+        if b == 16:
+            # En datos reales de 12–14 bits el byte bajo es casi uniforme (media ≈ 127) y el alto es
+            # chico. Si el byte "bajo" tiene media baja y el "alto" una media parecida, son dos
+            # píxeles de 8 bits leídos como uno.
+            q = len(datos) // 4
+            crudo = np.frombuffer(datos[q:q + 800_000], dtype=np.uint8).astype(np.float64)
+            alto_b, bajo_b = (crudo[1::2], crudo[0::2]) if packing == 'u16_le' else (crudo[0::2], crudo[1::2])
+            if bajo_b.mean() < 80 and alto_b.mean() > 0.3 * bajo_b.mean():
+                puntaje *= 0.05
+        res.append(dict(packing=packing, bits=b, ancho=ancho, pico=round(pico, 4), vecino=round(vecino, 4),
                         puntaje=round(puntaje, 4), bits_usados=usado))
     res.sort(key=lambda r: -r['puntaje'])
     return res
+
+
+# Confianza: puntaje alto, o puntaje moderado con clara ventaja sobre el segundo candidato.
+# Medido: ruido 0,0; cuadro oscuro 0,004; plano con viñeteo 0,072 (ventaja 1,08×).
+CONFIANZA_ALTA, CONFIANZA_MIN, VENTAJA_MIN = 0.15, 0.03, 1.5
+
+
+def confiable(cands):
+    if not cands:
+        return False
+    p1 = cands[0]['puntaje']
+    p2 = cands[1]['puntaje'] if len(cands) > 1 else 0.0
+    return p1 >= CONFIANZA_ALTA or (p1 >= CONFIANZA_MIN and p1 >= VENTAJA_MIN * max(p2, 1e-9))
 
 
 def a_imagen(datos: bytes, packing: str, ancho: int) -> np.ndarray:
@@ -118,6 +164,7 @@ def a_imagen(datos: bytes, packing: str, ancho: int) -> np.ndarray:
 
 
 def _suavidad(img: np.ndarray) -> float:
+    """Menor = mejor: diferencia media entre filas del mismo color (y, y+2)."""
     a = img[:-2:, :].astype(np.int32)
     b = img[2:, :].astype(np.int32)
     return float(np.mean(np.abs(a - b)))
@@ -140,8 +187,15 @@ def combinar(campos: list[np.ndarray], layout: str | None):
         p.reshape(h, 2, w)[0::2] = A.reshape(h // 2, 2, w)
         p.reshape(h, 2, w)[1::2] = B.reshape(h // 2, 2, w)
         opciones['pares'] = p
-    opciones['apilado'] = np.vstack([A, B])
+    # Si los dos archivos son casi la misma imagen, son campos entrelazados de una misma escena y
+    # no mitades apiladas (que muestran contenido distinto).
+    a_r = A[::16, ::16].astype(np.float64).ravel(); b_r = B[::16, ::16].astype(np.float64).ravel()
+    parecidos = a_r.std() and b_r.std() and np.corrcoef(a_r, b_r)[0, 1] > 0.97
+    if not parecidos or layout == 'apilado':
+        opciones['apilado'] = np.vstack([A, B])
     if layout:
+        if layout not in opciones:
+            raise SystemExit(f'disposición {layout} imposible con campos de {h} filas')
         return opciones[layout], layout
     puntaje = {k: _suavidad(v) for k, v in opciones.items()}
     mejor = min(puntaje, key=puntaje.get)
@@ -150,7 +204,8 @@ def combinar(campos: list[np.ndarray], layout: str | None):
 
 def detectar_cfa(img: np.ndarray):
     h, w = img.shape
-    c = img[h // 8: h - h // 8, w // 8: w - w // 8].astype(np.float64)
+    y0, x0 = (h // 8) & ~1, (w // 8) & ~1  # origen par: la fase del patrón es la de la imagen
+    c = img[y0: h - y0, x0: w - x0].astype(np.float64)
     c = c[: c.shape[0] // 2 * 2, : c.shape[1] // 2 * 2]
     p = {(y, x): c[y::2, x::2] for y in (0, 1) for x in (0, 1)}
     def parecido(a, b):  # menor = más parecidos (media y textura)
@@ -254,15 +309,20 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
 
 
 # ---------------------------------------------------------------- flujo
-def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None):
+def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, invertir=False):
     datos = [open(r, 'rb').read() for r in rutas]
+    if invertir:
+        datos = datos[::-1]
     if packing is None:
         cands = detectar_formato(datos[0])
         if bits:
             cands = [c for c in cands if c['bits'] == bits] or cands
         if not cands:
-            raise SystemExit('archivo demasiado pequeño o truncado: ningún formato da 3 filas de 7000 píxeles')
+            raise SystemExit('sin formato posible: archivo demasiado pequeño, truncado o constante (todos los bytes iguales)')
         elegido = cands[0]
+        if not confiable(cands) and ancho is None:
+            raise SystemExit(f"detección poco fiable (puntajes {[c['puntaje'] for c in cands[:2]]}): escena sin "
+                             'estructura (plano, oscuro, ruido). Pasar --packing y --width sacados de una toma con detalle.')
         packing = elegido['packing']
         ancho = ancho or elegido['ancho']
     else:
@@ -279,7 +339,9 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None):
     cfa_det, cfa_info = detectar_cfa(img)
     info = dict(archivos=[os.path.basename(r) for r in rutas], tamanos=[len(d) for d in datos],
                 packing=packing, bits=BITS[packing], ancho=int(ancho), alto=int(img.shape[0]),
-                layout=layout_usado, cfa=cfa or cfa_det, cfa_detectado=cfa_det,
+                layout=layout_usado, orden_campos='invertido' if invertir else 'O, b',
+                cfa=cfa or cfa_det, cfa_detectado=cfa_det,
+                cfa_rb_provisional=cfa is None,  # R vs B sale de "el más oscuro es R"; confirmar con toma real
                 cfa_metricas={k: round(v, 5) for k, v in cfa_info.items()},
                 candidatos=cands[:5])
     return img, info
@@ -290,17 +352,18 @@ def main():
     ap.add_argument('accion', choices=['info', 'dng'])
     ap.add_argument('archivos', nargs='+')
     ap.add_argument('-o', '--salida')
-    ap.add_argument('--bits', type=int)
+    ap.add_argument('--bits', type=int, choices=sorted(set(BITS.values())))
     ap.add_argument('--packing', choices=[p for p, _ in FORMATOS])
     ap.add_argument('--width', type=int)
     ap.add_argument('--layout', choices=['filas', 'pares', 'apilado'])
     ap.add_argument('--cfa', choices=list(_CFA))
     ap.add_argument('--black', type=int)
     ap.add_argument('--white', type=int)
+    ap.add_argument('--invertir-campos', action='store_true', help='el orden de los campos no se detecta; usar si los colores salen cambiados')
     a = ap.parse_args()
     if len(a.archivos) > 2:
         sys.exit('máximo dos archivos (los dos campos de un disparo)')
-    img, info = analizar(a.archivos, a.bits, a.packing, a.width, a.layout, a.cfa)
+    img, info = analizar(a.archivos, a.bits, a.packing, a.width, a.layout, a.cfa, a.invertir_campos)
     # Negro provisional: percentil bajo de la escena. Sobreestima si la escena no tiene negros puros;
     # el valor real sale del negro óptico de una toma real (o --black).
     negro = a.black if a.black is not None else int(np.percentile(img, 0.05))
@@ -311,6 +374,8 @@ def main():
         blanco = (1 << max(int(img.max()).bit_length(), 12)) - 1
     else:
         blanco = (1 << info['bits']) - 1
+    if not 0 <= negro < blanco:
+        sys.exit(f'niveles inválidos: negro {negro}, blanco {blanco}')
     info['niveles_provisionales'] = a.black is None or a.white is None
     info.update(negro=negro, blanco=blanco)
     if a.accion == 'info':

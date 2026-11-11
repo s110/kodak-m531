@@ -1,4 +1,0 @@
-10 REM sintaxis 3: argumentos separados por espacios
-20 SYSTEM ScreenString 20 80 "P3 OK"
-30 SYSTEM delay_us(1500000)
-40 END

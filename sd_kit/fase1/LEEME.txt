@@ -6,14 +6,14 @@ Copiar TODO el contenido de esta carpeta a la RAÍZ de la SD de la Kodak (no den
   ENABLE_NAND_TOOL         muestra la NAND Tool dentro del menú oculto
   DISABLE_AUTO_POWER_OFF   evita que se apague durante volcados y lecturas por USB
   Batch/BatchScripts.txt   lista de scripts que el firmware ejecuta al encender (hipótesis)
-  Batch/P1..P5.srt         sondas inofensivas: escriben texto en pantalla y leen una bandera;
+  Batch/P1, P4, P5 (.srt)  sondas inofensivas: escriben texto en pantalla y leen una bandera;
+                           P1 prueba la llamada "SYSTEM Funcion(args)";
                            P4 activa el RAW sólo hasta apagar la cámara (SaveCFAonTake(1));
-                           P5 prueba IF/GOTO, == y !=, negativos y variables con dígitos;
-                           orden: P1 P2 P4 P5 P3 (P3, la sintaxis más dudosa, al final)
+                           P5 prueba IF/GOTO, == y !=, negativos y variables con dígitos
 
 Copiar con: cp -X (sin metadatos de macOS) y luego dot_clean en la SD.
 
-Qué observar al encender: "P1 OK", "P2 OK", dos números (0 y 1), "P5 == OK", "P5 != OK", "P3 OK".
+Qué observar al encender: "P1 OK", dos números (0 y 1), "P5 == OK", "P5 != OK".
 Después, traer la SD al Mac: el firmware deja logs (*.log) en Batch/ que dicen qué sintaxis funcionó.
 
 Para deshacer: borrar HiddenMenu, ENABLE_NAND_TOOL, DISABLE_AUTO_POWER_OFF, Batch/ (con sus .log),

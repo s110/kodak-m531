@@ -1,4 +1,0 @@
-10 REM sintaxis 2: sin palabra clave
-20 ScreenString(20, 50, "P2 OK")
-30 SYSTEM delay_us(1500000)
-40 END

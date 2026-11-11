@@ -12,8 +12,8 @@ Antes de empezar: batería cargada. Cámara fuera del USB salvo donde se indique
    con `cp -X` (sin metadatos de macOS), corre `dot_clean` sobre la SD, vuelve a correr el verificador
    **sobre la copia en la SD** y compara hashes con el kit.
 2. Expulsa la SD, ponla en la cámara y enciéndela.
-3. Anota (o fotografía) qué aparece al arrancar: "P1 OK", "P2 OK", dos números (P4: 0 y 1),
-   "P5 == OK/NO", "P5 != OK/NO" y "P3 OK". P3 va al final porque es la sintaxis más dudosa.
+3. Anota (o fotografía) qué aparece al arrancar: "P1 OK", dos números (P4: 0 y 1),
+   "P5 == OK/NO" y "P5 != OK/NO".
    - Si no aparece nada, el arranque automático no corrió. Puede ser la precondición del búfer de
      128 KB (ver NOTAS.md) y no la falta de soporte: los logs de `Batch/` lo dirán.
 

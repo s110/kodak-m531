@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Verifica los scripts .srt antes de copiarlos a la SD de la M531.
+"""Verifica los scripts .srt antes de copiarlos a la SD de la M531 (parser estricto, lista blanca).
 
 uso: python3 -I tools/check_scripts.py CARPETA_BATCH
 
-Falla (código 1) si un script:
-  * nombra cualquier identificador que no sea palabra clave, variable asignada con LET o función
-    de la lista permitida (con o sin paréntesis: `FOREIGN UpdateFW 1` también se detecta);
-  * usa una palabra clave (SYSTEM/FOREIGN/DEBUGGING) que no corresponde a la tabla de la función;
-  * usa Run_SpecifyFunc sin 9 enteros literales, con un destino distinto de peek32/poke32/flush,
-    con nargs distinto del de ese destino o con outpos ≠ 0;
-  * escribe con poke32 dentro de una zona intocable o fuera de la SDRAM;
-  * salta con GOTO/GOSUB a una línea que no existe;
-  * no tiene número de línea, repite números, los desordena o no termina en END;
-  * BatchScripts.txt nombra un script inexistente, le pone extensión o usa un nombre que otras
-    pantallas del firmware lanzan solas (Reset, ISO_Calibration, BatTestCIPA, BatTestPreview, Preview).
+Regla general: todo lo que no esté explícitamente permitido es un error. En concreto falla si:
+  * un identificador no es palabra clave, variable creada con LET o función permitida
+    (se extraen sin límites de palabra: `1UpdateFW` también se detecta);
+  * una función de cualquiera de las tablas del firmware aparece fuera de una llamada válida
+    `PALABRA_CLAVE Nombre(args)` (sin paréntesis, con coma en medio, etc.);
+  * la palabra clave no corresponde a la tabla de la función;
+  * los argumentos no cumplen el esquema de esa función (sólo enteros literales en rango, cadenas
+    sin barra invertida o, donde se admite, una variable). Run_SpecifyFunc: 9 enteros literales,
+    destino peek32/poke32/flush, nargs exacto, outpos 0 y destino fuera de zonas intocables;
+  * un LET crea una variable con nombre de función o palabra clave;
+  * hay números con ceros a la izquierda, comillas desparejas o barras invertidas en cadenas;
+  * GOTO/GOSUB/THEN saltan a algo que no es una línea existente;
+  * no hay número de línea, se repiten o desordenan, o la última línea no es END;
+  * BatchScripts.txt falta, está vacío, nombra algo que no es un nombre simple, nombra un script
+    inexistente o uno que otras pantallas del firmware ejecutan solas.
 """
 import json
 import os
@@ -24,98 +28,178 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 from km531fw import ZONAS_INTOCABLES  # noqa: E402
 
-PERMITIDAS = {
-    'ScreenString', 'ScreenInt32', 'ScreenFloat32', 'ScreenInt32_Hex', 'delay_us', 'ClearOSD',
-    'SaveCFAonTake', 'SaveCFAonIRP', 'Take12BitCCDRaw', 'EnableS1ImgSaving',
-    'Run_SpecifyFunc', 'GetSystemDateTime', 'DebugMsgLog', 'MemRead',
-}
 PEEK32, POKE32, FLUSH = 0x198bbc, 0x2e8a84, 0x24e140
 NARGS = {PEEK32: 1, POKE32: 2, FLUSH: 2}
 ZONAS_PROHIBIDAS = ZONAS_INTOCABLES + [(0x0, 0x48000, 'vectores y pilas')]
 RAM_MAX = 0x4000000
 CLAVES = {'REM', 'LET', 'END', 'IF', 'THEN', 'ELSE', 'GOTO', 'GOSUB', 'RETURN', 'SYSTEM', 'FOREIGN',
-          'DEBUGGING', 'LOG_PRINT', 'SCREEN_PRINT', 'QUIT', 'TRUE', 'FALSE'}
+          'DEBUGGING', 'TRUE', 'FALSE'}
 RESERVADOS = {'reset', 'iso_calibration', 'battestcipa', 'battestpreview', 'preview'}
+
+# esquema de argumentos: lista de ('int', min, max) | ('str',) | ('val',) = entero literal o variable
+X, Y = ('int', 0, 479), ('int', 0, 239)
+ESQUEMAS = {
+    'ScreenString': [X, Y, ('str',)],
+    'ScreenInt32': [X, Y, ('val',)],
+    'ScreenInt32_Hex': [X, Y, ('val',)],
+    'delay_us': [('int', 0, 10_000_000)],
+    'ClearOSD': [],
+    'GetSystemDateTime': [],
+    'SaveCFAonTake': [('int', 0, 1)],
+    'SaveCFAonIRP': [('int', 0, 1)],
+    'Take12BitCCDRaw': [('int', 0, 1)],
+    'EnableS1ImgSaving': [('int', 0, 1)],
+    'DebugMsgLog': [('int', 0, 1)],
+    'MemRead': [('int', 0x48000, RAM_MAX - 4)],
+    'Run_SpecifyFunc': None,  # validación propia
+}
+PERMITIDAS = set(ESQUEMAS)
 _mapa = json.load(open(os.path.join(os.path.dirname(AQUI), 'docs_script_manejadores.json')))
 TABLA = {}
 for e in _mapa:
     TABLA.setdefault(e['nombre'], set()).add(e['palabra_clave'])
+ENTERO = re.compile(r'-?(0|[1-9]\d*)$')
+LLAMADA = re.compile(r'\b(SYSTEM|FOREIGN|DEBUGGING) ([A-Za-z_]\w*)\(([^()]*)\)')
+
+
+def _args(texto):
+    texto = texto.strip()
+    return [] if not texto else [a.strip() for a in texto.split(',')]
+
+
+def _validar_llamada(kw, f, args, variables, err):
+    if f not in PERMITIDAS:
+        err(f'función no permitida {f}')
+        return
+    if kw not in TABLA.get(f, set()):
+        err(f'{f} no es de la tabla {kw} (es {sorted(TABLA.get(f, []))})')
+    if f == 'Run_SpecifyFunc':
+        if len(args) != 9 or not all(ENTERO.match(a) for a in args):
+            err('Run_SpecifyFunc necesita 9 enteros literales')
+            return
+        v = [int(a) for a in args]
+        fn, nargs, outpos, dest = v[0], v[1], v[2], v[3]
+        if fn not in NARGS:
+            err(f'Run_SpecifyFunc a {fn:#x}, sólo peek32/poke32/flush')
+            return
+        if nargs != NARGS[fn] or outpos != 0:
+            err(f'nargs/outpos inválidos para {fn:#x} ({nargs}, {outpos})')
+        if any(x != 0 for x in v[3 + NARGS[fn]:]):
+            err('argumentos sobrantes de Run_SpecifyFunc distintos de 0')
+        if fn == FLUSH and not (0 < v[4] <= 0x10000):
+            err(f'flush con longitud {v[4]} fuera de rango')
+        if not 0 <= dest < RAM_MAX or dest % 4:
+            err(f'dirección {dest:#x} fuera de RAM o desalineada')
+        if fn == POKE32:
+            for ini, fin, motivo in ZONAS_PROHIBIDAS:
+                if ini <= dest < fin:
+                    err(f'poke32 en {dest:#x} ({motivo})')
+        return
+    esquema = ESQUEMAS[f]
+    if len(args) != len(esquema):
+        err(f'{f} espera {len(esquema)} argumento(s), tiene {len(args)}')
+        return
+    for a, e in zip(args, esquema):
+        if e[0] == 'str':
+            if not re.fullmatch(r'"[^"\\]*"', a):
+                err(f'{f}: se esperaba una cadena simple, no {a}')
+        elif e[0] == 'val' and a in variables:
+            continue
+        elif not ENTERO.match(a):
+            err(f'{f}: se esperaba un entero literal, no {a}')
+        elif e[0] == 'int' and not e[1] <= int(a) <= e[2]:
+            err(f'{f}: {a} fuera de rango [{e[1]}, {e[2]}]')
 
 
 def revisar_srt(ruta):
     errores = []
-    lineas = open(ruta, 'rb').read().decode('ascii').splitlines()
+    try:
+        lineas = open(ruta, 'rb').read().decode('ascii').splitlines()
+    except UnicodeDecodeError:
+        return [f'{ruta}: contiene caracteres no ASCII']
     numeros, saltos, variables, cuerpos = [], [], set(), []
     for n, l in enumerate(lineas, 1):
         if not l.strip():
             continue
-        m = re.match(r'\s*(\d+)\s+(.*)$', l)
-        if not m:
-            errores.append(f'{ruta}:{n}: sin número de línea')
+        m = re.match(r'(\d+) (.*)$', l)
+        if not m or (len(m.group(1)) > 1 and m.group(1).startswith('0')):
+            errores.append(f'{ruta}:{n}: línea sin número válido')
             continue
-        num, cuerpo = int(m.group(1)), m.group(2)
+        num, cuerpo = int(m.group(1)), m.group(2).strip()
         if num in numeros:
             errores.append(f'{ruta}:{n}: número de línea repetido {num}')
         if numeros and num < numeros[-1]:
             errores.append(f'{ruta}:{n}: números de línea fuera de orden')
         numeros.append(num)
-        if cuerpo.startswith('REM'):
+        if re.match(r'REM( |$)', cuerpo):
             continue
-        s = re.sub(r'"[^"]*"', '""', cuerpo)
-        cuerpos.append((n, s))
-        mv = re.match(r'LET\s+([A-Za-z_]\w*)\s*=', s)
+        cuerpos.append((n, cuerpo))
+    for n, cuerpo in cuerpos:
+        mv = re.match(r'LET ([A-Za-z][A-Za-z0-9]*) = ', cuerpo)
         if mv:
-            variables.add(mv.group(1))
-        saltos += [(n, int(x)) for x in re.findall(r'\b(?:GOTO|GOSUB)\s+(\d+)', s)]
-    for n, s in cuerpos:
-        for kw, f in re.findall(r'\b(SYSTEM|FOREIGN|DEBUGGING)\s+([A-Za-z_]\w*)', s):
-            if f not in PERMITIDAS:
-                errores.append(f'{ruta}:{n}: función no permitida {f}')
-            elif kw not in TABLA.get(f, set()):
-                errores.append(f'{ruta}:{n}: {f} no es de la tabla {kw} (es {sorted(TABLA.get(f, []))})')
-        for ident in re.findall(r'\b[A-Za-z_]\w*\b', s):
-            if ident not in CLAVES and ident not in variables and ident not in PERMITIDAS:
-                errores.append(f'{ruta}:{n}: identificador desconocido o no permitido {ident}')
-        if 'Run_SpecifyFunc' in s and not re.search(r'Run_SpecifyFunc\s*\(', s):
-            errores.append(f'{ruta}:{n}: Run_SpecifyFunc sin paréntesis')
-        for args in re.findall(r'Run_SpecifyFunc\s*\(([^)]*)\)', s):
-            partes = [p.strip() for p in args.split(',')]
-            if len(partes) != 9 or not all(re.fullmatch(r'-?\d+', p) for p in partes):
-                errores.append(f'{ruta}:{n}: Run_SpecifyFunc necesita 9 enteros literales')
+            nombre = mv.group(1)
+            if nombre in TABLA or nombre in CLAVES or nombre in PERMITIDAS:
+                errores.append(f'{ruta}:{n}: LET no puede crear la variable {nombre}')
+            else:
+                variables.add(nombre)
+    for n, cuerpo in cuerpos:
+        def err(msg, n=n):
+            errores.append(f'{ruta}:{n}: {msg}')
+        if cuerpo.count('"') % 2:
+            err('comillas desparejas')
+            continue
+        if re.search(r'"[^"]*\\[^"]*"', cuerpo):
+            err('barra invertida dentro de una cadena')
+        sin_texto = re.sub(r'"[^"]*"', '""', cuerpo)
+        if re.search(r'(?<![\w.])0\d', sin_texto):
+            err('número con ceros a la izquierda')
+        llamadas = LLAMADA.findall(sin_texto)
+        for kw, f, args in llamadas:
+            _validar_llamada(kw, f, _args(args), variables, err)
+        resto = LLAMADA.sub(' ', sin_texto)
+        for ident in re.findall(r'[A-Za-z_]\w*', resto):
+            if ident in TABLA or ident in PERMITIDAS:
+                err(f'{ident} fuera de una llamada válida "PALABRA_CLAVE {ident}(...)"')
+            elif ident in ('SYSTEM', 'FOREIGN', 'DEBUGGING'):
+                err(f'{ident} sin una llamada válida a continuación')
+            elif ident not in CLAVES and ident not in variables:
+                err(f'identificador desconocido {ident}')
+        for kw, destino in re.findall(r'\b(GOTO|GOSUB|THEN)\b[\s,]*([^\s,]*)', resto):
+            if kw == 'THEN' and destino in ('GOTO', 'GOSUB'):
                 continue
-            v = [int(p) for p in partes]
-            f, nargs, outpos, dest = v[0], v[1], v[2], v[3]
-            if f not in NARGS:
-                errores.append(f'{ruta}:{n}: Run_SpecifyFunc a {f:#x}, sólo peek32/poke32/flush')
-                continue
-            if nargs != NARGS[f] or outpos != 0:
-                errores.append(f'{ruta}:{n}: nargs/outpos inválidos para {f:#x} ({nargs}, {outpos})')
-            if f == FLUSH and not (0 < v[4] <= 0x10000):
-                errores.append(f'{ruta}:{n}: flush con longitud {v[4]} fuera de rango')
-            if not 0 <= dest < RAM_MAX or dest % 4:
-                errores.append(f'{ruta}:{n}: dirección {dest:#x} fuera de RAM o desalineada')
-            if f == POKE32:
-                for ini, fin, motivo in ZONAS_PROHIBIDAS:
-                    if ini <= dest < fin:
-                        errores.append(f'{ruta}:{n}: poke32 en {dest:#x} ({motivo})')
+            if kw == 'THEN' and not destino:
+                err('THEN sin destino')
+            elif kw == 'THEN' and not destino.isdigit():
+                continue  # THEN seguido de sentencia (llamada) ya validada arriba
+            elif not destino.isdigit():
+                err(f'{kw} a algo que no es un número de línea: {destino!r}')
+            else:
+                saltos.append((n, int(destino)))
     for n, destino in saltos:
         if destino not in numeros:
             errores.append(f'{ruta}:{n}: salto a la línea {destino}, que no existe')
-    if not any(re.match(r'\s*\d+\s+END\s*$', l) for l in lineas):
-        errores.append(f'{ruta}: no termina en END')
+    ultima = [l for l in lineas if l.strip()]
+    if not ultima or not re.fullmatch(r'\d+ END\s*', ultima[-1]):
+        errores.append(f'{ruta}: la última línea debe ser END')
     return errores
 
 
 def main():
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
     carpeta = sys.argv[1]
     errores = []
     lista = os.path.join(carpeta, 'BatchScripts.txt')
-    if os.path.exists(lista):
-        for nombre in open(lista).read().split():
-            if nombre.lower().endswith('.srt'):
-                errores.append(f'BatchScripts.txt: "{nombre}" lleva extensión; el firmware agrega .srt')
-            elif not os.path.exists(os.path.join(carpeta, nombre + '.srt')):
-                errores.append(f'BatchScripts.txt: falta {nombre}.srt')
+    nombres = open(lista).read().split() if os.path.exists(lista) else []
+    if not nombres:
+        errores.append('BatchScripts.txt falta o está vacío')
+    for nombre in nombres:
+        if not re.fullmatch(r'[A-Za-z0-9_]{1,8}', nombre):
+            errores.append(f'BatchScripts.txt: "{nombre}" no es un nombre simple (sin extensión, sin carpetas, ≤ 8)')
+        elif nombre.lower() in RESERVADOS:
+            errores.append(f'BatchScripts.txt: {nombre} es un nombre que otra pantalla ejecuta sola')
+        elif not os.path.exists(os.path.join(carpeta, nombre + '.srt')):
+            errores.append(f'BatchScripts.txt: falta {nombre}.srt')
     for f in sorted(os.listdir(carpeta)):
         if f.startswith('._'):
             errores.append(f'{f}: archivo de metadatos de macOS; copiar con cp -X o dot_clean')
@@ -123,6 +207,8 @@ def main():
             if f[:-4].lower() in RESERVADOS:
                 errores.append(f'{f}: nombre que otra pantalla del firmware ejecuta sola')
             errores += revisar_srt(os.path.join(carpeta, f))
+        elif os.path.isdir(os.path.join(carpeta, f)):
+            errores.append(f'{f}/: no se admiten subcarpetas en Batch')
     for e in errores:
         print('ERROR', e)
     print('OK' if not errores else f'{len(errores)} error(es)')

@@ -206,3 +206,24 @@ Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Regist
 - **Vía sin SD:** sin tarjeta, la cámara guarda en la memoria interna. Tomar una foto (o varias, a
   ISO y Sharpness distintos) y leer por USB `0x50f900–0x50fc00` con `tools/leer_ram.py` muestra los
   valores reales y cómo cambian. Sólo requiere la cámara encendida y conectada.
+
+## Tercera revisión (Fable, acotada al código Python) — 2026-11-11
+
+Fable completó una revisión de `m531raw.py`, `e2e_raw.py` y `check_scripts.py` (la revisión amplia
+del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y estado:
+- Detección de ancho: correlacionaba filas de colores distintos; fallaba 76 de 90 casos con otras
+  fotos. Ahora usa la diferencia horizontal entre píxeles del mismo color, desfases pares y decide
+  W/2W por prominencia. Prueba E2E ampliada a 18 fotos × 6 formatos (108 casos, tamaños con
+  h//8 o w//8 impares, u16_be): **108/108 OK**. R vs B por heurística acierta 66/108 y se informa
+  como provisional (`cfa_rb_provisional`), no se oculta.
+- CFA: el recorte perdía la fase con h//8 o w//8 impares → origen par. La E2E exige ahora la diagonal
+  verde del DNG leído por LibRaw.
+- Confianza: escenas sin estructura (ruido, plano, oscuro) fallan con mensaje en lugar de dar un
+  formato inventado. 8 bits leídos como 16 se descartan por estadística de bytes. Disposición
+  "apilado" se excluye si los dos campos son casi la misma imagen.
+- `check_scripts.py` reescrito como parser estricto: 15 formas de esquivarlo (LET que tapa funciones,
+  paréntesis sin cerrar, coma tras la palabra clave, ceros a la izquierda, barras en cadenas, GOTO a
+  variable, REMxxx, etc.) quedan bloqueadas; esquemas de argumentos por función. Se quitaron las
+  sondas P2/P3 (sintaxis sin palabra clave / con espacios): el verificador ya las prohíbe.
+- Pendiente conocido: el orden de los dos campos no se detecta (`--invertir-campos`); el negro
+  automático sobreestima en escenas sin negros; la matriz de color es provisional.
