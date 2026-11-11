@@ -1,0 +1,12 @@
+# volcados y binarios del fabricante: fuera del repo (se guardan sus hashes)
+dump/
+work/
+ghidra_proj/
+firmware/stock/*.bin
+tools/ghidra/
+tools/src/
+tools/arc/
+.venv/
+ref/
+__pycache__/
+.DS_Store

@@ -1,0 +1,114 @@
+# Kodak EasyShare M531: notas de ingeniería inversa
+
+Inicio: 2026-11-11. Cámara: M531, serie USB `M531 020923046`, VID 0x040A PID 0x0600.
+
+## Plataforma (confirmado leyendo la RAM viva)
+
+- ODM Altek, ASIC **Sunny9 / SD9** (núcleo ARCompact), RTOS MQX, firmware "CamOS".
+  Misma familia que la C713/CD703 de ModernShare (`ref/ModernShare`), que ya tiene DNG
+  directo, looks de película y menú propio funcionando en cámara.
+- Firmware de actualización: `B:\SYSTEM\KM531.FW` (B: = SD, A: = memoria interna).
+  También `A:\KM531.FW`. El CD virtual es `B:\SYSTEM\IMAGE.ISO` / `A:\IMAGE.ISO`.
+- Kodak nunca publicó (o no se archivó) un updater de la M531. Sólo hay `KM530170.exe`
+  de la M530 y `download.kodak.com` ya no resuelve.
+
+## Fuga de RAM por USB (sin tocar nada en la cámara)
+
+La cámara se presenta como CD-ROM de 343 MB con bloques de 2352 B. Sólo el primer
+~1 MB es el ISO de Kodak; el resto es una ventana de 64 MB que se repite y que es la
+**SDRAM viva** de la cámara.
+
+- Leer con `dd if=/dev/rdiskN bs=37632` (16 sectores). Con bs=2048 los datos salen
+  desordenados; con bs=150528 no lee nada. Unos 3 MB/s.
+- Cada bloque de 2352 B: 16 B de cabecera falsa + 2048 B de datos + 288 B de relleno.
+- Mapeo: `RAM[a] = ventana[(a + 0xB22C00) mod 0x4000000]`. Verificado: 10/10 cadenas
+  conocidas tienen punteros LE a `offset - 0xB22C00`.
+- `dump/ram_snapshot.bin` = RAM lineal de 64 MB (instantánea, no es el .FW).
+
+## Menú oculto (sin flashear)
+
+- Crear la carpeta `\HiddenMenu` en la raíz de la SD → Menu → Setup → About.
+- Ítems: FIRMWARE VERSION, PRODUCT INFORMATION, ERROR CODE, CALIBRATION DATA, DEBUG,
+  TOTAL INFO, DEBUGMODE, NAND TOOL, LCD SELECT, STROBE SELECT, UPDATE FIRMWARE.
+- DEBUG MENU: ThumFormat/VGAFormat/FullFormat, **SaveCCDRawOnTake**, SaveCFARawOnIRP,
+  SaveThum/VGA/Full YRGB/JPEG, SaveAEOnS1, **Take12BitCCDRawImage**.
+- Archivos disparadores en la SD: `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`,
+  `DISABLE_BATGAUGE_POWER_OFF`, `DISABLE_TEMPER_PROTECT`, `STR_EN`, `ALLOW_ERASE_BOOT` (¡no!),
+  `ALLOW_ROLLBACK_OLD_PARTITION` (¡no!), `RESET_DEFAULT_LCD_TYPE`.
+- `\MEMDUMP.BIN`: volcado de RAM a la SD (la combinación de teclas está por confirmar).
+
+## NAND Tool (Engineering Mode)
+
+Sólo lectura, seguros: A1 Calibration.dmp, B3 MainCode.dmp, C1 BootCode.dmp,
+D1 NANDPartition.txt, E1 CameraParam.dmp, F1 NANDReserved.dmp, G1 NANDP1.dmp,
+I4 BFNSetting.txt, I5 BootNANDBase.dmp, M2 Face Registry.
+
+**NO tocar:** A2/A3 (calibración), B1/B2 (main code), C2 (boot), D2, E2, F2, H1/H2
+(formatean), I1–I3, I6, J1 (borra el sector 0 de la NAND), K1, L1, M1/M3.
+
+Actualización del código principal por esta vía: `TBM_X.BIN` (en RAM aparece
+`B:\TBM_HD14P.BIN` y `B:\TBIB_HD14P.BIN` para el boot).
+
+## Sensor
+
+- Menú de ajuste del AFE: "Take FR 8 bits / FR 14 bits / LV 12 bits / LV 14 bits",
+  "Save Raw". El AFE digitaliza a 14 bits.
+- `raw_img_info_sunny9` en RAM: estructura de metadatos del RAW.
+
+## Firmware de fábrica en RAM (2026-11-11)
+
+Cabecera RHIR completa en RAM `0xa05ffc` (modelo `0x01121410`, MAIN 1.0). Registros
+(u16 tipo, u16 0, u16 sector inicial, u16 nº sectores, u32 destino RAM, u32 sum32):
+
+| rec | tipo | archivo | destino | tamaño | sum32 | ¿coincide la RAM? |
+|---|---|---|---|---|---|---|
+| 0 código | 1 | 0x200 | 0x48000 | 0x361e00 | a53f33a3 | difiere en exactamente +0x08000000 |
+| 1 datos | 1 | 0x362000 | 0x3aa000 | 0xeae00 | 4a34f20f | no (datos mutados en ejecución, esperado) |
+| 2 gráficos | 0 | 0x44ce00 | 0x528000 | 0x51800 | e39ecc58 | **sí, exacto** |
+| 3 | 1 | 0x49e600 | 0x5ae000 | 0x200 | 00f92e93 | **sí, exacto** |
+| 4–6 idiomas | 0 | … | 0x5ae000 | … | … | sólo el idioma cargado |
+| 7 especial | 2 | sector 46144 | 0 | 0x800 | 0 | no tocar |
+
+- Validador del updater `0x2bd46c`: RHIR, palabra de modelo (devuelta por `0x4c1c0`),
+  tamaño ≤ partición, y sum32 de los registros tipo 1. Sum32 = `0x2e06e4`.
+  Rutina de actualización `0x2bcdb8`; códigos 0x1c00110 = no encontrado, 0x1c00111 = inválido.
+  También acepta un contenedor con marcador `INFO` + `0x55aaaa55` (paquete 5-en-1).
+- **Código de fábrica reconstruido byte a byte.** La diferencia de +0x08000000 es la variable
+  `0x38ac4c` dentro de la sección de código: la función `0x30b0bc` hace `lr r1,[0x18]` y la
+  guarda ahí al arrancar. Con esa palabra en 0, sum32 = `a53f33a3`, igual que la cabecera.
+  Dos lecturas en sesiones distintas dan el mismo código. Guardado en `firmware/stock/`
+  (`rec0_code_0x48000.bin`, gráficos, rec3 y los primeros 0xA0 B de la cabecera, con SHA256SUMS).
+- Falta para un .FW completo: sección de datos original (rec1, mutada en RAM), idiomas
+  (rec4–6) y la cola de cabecera (0xA0–0x1FF, ¿KHIR?). Fuente: NAND Tool → B3 MainCode.dmp.
+
+## RAW
+
+- Banderas (byte en RAM): SaveCFAonTake `0x3df0e4` (getter `0x1b0648`, setter `0x1b0654`),
+  Take12BitCCDRaw `0x3dbdfe` (getter `0x12bf20`), SaveFullJPEG `0x3da92a` (=1).
+- Captura: `0x127168` consulta SaveCFAonTake y guarda dos búferes con `0x1b066c`
+  (sufijo 'O' y 'o', probablemente campos par/impar del CCD entrelazado) + `0x1b0754`.
+- El motor de scripts (`B:\Batch\BatchScripts.txt`, `.SRT`) tiene comandos SaveCFAonTake,
+  SaveCFAonIRP, Take12BitCCDRaw, SetExposureTime, SetIsoSpeed, SetAdGain, SetIrisIndex.
+  Posible vía para activar RAW y exposición manual sin flashear.
+
+## Herramientas
+
+- Desensamblador: imagen Docker `kodak-arctools:24.04` (binutils-arc-linux-gnu 2.42 de Ubuntu).
+  `tools/dis.sh INICIO FIN`. `work/code_full.s` = código completo desensamblado.
+- La compilación nativa de binutils 2.43 falla en macOS (zlib/SDK); no hace falta.
+
+## Motor de scripts (2026-11-11)
+
+- ~200 comandos (tabla en RAM ~0x486000). Destacan: MemRead, MemWrite, Run_SpecifyFunc,
+  SaveCFAonTake, SaveCFAonIRP, Take12BitCCDRaw, IRP_SaveNoCompressImg, IRP_SetDenoiseTH,
+  IRP_SetEdgeEnhanceLUT, IRP_EnableShade/DisableShade, ImgCap_SetExposureTime/SetAperture/
+  SetISOSpeed/SetFocusPosition, SetIsoSpeed, SetAdGain, Key* (teclas simuladas), Reboot, UpdateFW.
+- Lanzadores: `0x53e44(unidad)` busca `<unidad>\Batch\BatchScripts.txt`; `0x53ebc(ruta)` corre un
+  .srt concreto (usa `\TP$BATCH` y `\TEMP.SRT` como temporales). Log: "***** Script %s starts here".
+- **Arranque:** la pantalla de inicio (tabla de eventos `0x4706d8`, junto a las cadenas
+  `B:\DISABLE_AUTO_POWER_OFF` etc.) atiende el evento `0x7c0a` en `0x1fdff4`, que en `0x1fe1dc`
+  llama a `0x2bee0c("B:")` → `0x53e44` → ejecuta `B:\Batch\BatchScripts.txt` si existe.
+  Hipótesis fuerte, sin probar en cámara: un script en la SD corre solo al encender.
+  Rollback de esa vía: borrar el archivo y reiniciar (sólo toca RAM).
+- `B:\Batch\Reset.srt` lo corre `0x2bd950` con OK (evento 0x580) en otra pantalla (tabla 0x489fd0).
+- Pendiente: sintaxis exacta del .txt/.srt (parser en torno a `0x1078d8`, `0x1062e0`).

@@ -1,0 +1,15 @@
+Kit fase 1 para la SD de la Kodak M531 (no flashea nada; todo se revierte quitando los archivos).
+
+Copiar TODO el contenido de esta carpeta a la RAÍZ de la SD de la Kodak (no dentro de otra carpeta).
+
+  HiddenMenu/              activa el menú oculto: Menu → Setup → About
+  ENABLE_NAND_TOOL         muestra la NAND Tool dentro del menú oculto
+  DISABLE_AUTO_POWER_OFF   evita que se apague durante volcados y lecturas por USB
+  Batch/BatchScripts.txt   lista de scripts que el firmware ejecuta al encender (hipótesis)
+  Batch/P1..P4.srt         sondas inofensivas: escriben texto en pantalla y leen una bandera;
+                           P4 activa el RAW sólo hasta apagar la cámara (SaveCFAonTake(1))
+
+Qué observar al encender: textos "P1 OK"/"P2 OK"/"P3 OK" y dos números (0 y 1).
+Después, traer la SD al Mac: el firmware deja logs (*.log) en Batch/ que dicen qué sintaxis funcionó.
+
+Para deshacer: borrar HiddenMenu, ENABLE_NAND_TOOL, DISABLE_AUTO_POWER_OFF y Batch/.
