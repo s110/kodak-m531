@@ -43,7 +43,10 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 2. `KM531.FW` de fábrica reconstruido desde B3 que reproduce **todas** las sumas de la cabecera
    original (código ya verificado desde RAM: `a53f33a3`).
 3. Confirmar en `BootCode.dmp` que el cargador de arranque:
-   - no se reescribe al actualizar (la rutina `0x2bcdb8` sólo escribe la partición del main), y
+   - no se reescribe al actualizar. **Verificado en código (2026-11-11):** el escritor `0x2bd5bc`
+     valida la cabecera, escribe sólo la **partición 6** de la NAND (`0x1447a0(6, buf, 0, tamaño)`),
+     la relee (`0x1433c0`) y compara con `memcmp` (`0x3019c8`), hasta 3 intentos. El tamaño se
+     limita al de la partición 6 (`0x6584c(6, …)`). Mismo esquema que la C713. Y además:
    - tiene una vía de recuperación si el main no arranca (actualizar desde SD al encender o
      combinación de teclas). Si no la tiene, el nivel 3 queda **descartado**.
 4. Los parches no tocan: la rutina de actualización (`0x2bcdb8–0x2bd800`), el menú oculto ni
