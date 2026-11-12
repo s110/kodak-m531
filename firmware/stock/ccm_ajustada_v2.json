@@ -1,0 +1,401 @@
+{
+ "descripcion": "CCM M531: cámara balanceada (AWB del MakerNote) → sRGB lineal, filas suman 1",
+ "metodo": "bloques 32 px, Huber + ridge 0, curva de tono por foto; validación dejando una escena fuera",
+ "metrica": "ΔE2000 (D65) contra el JPG de la cámara, tras curva de tono por foto; croma_ab = distancia en a*b*",
+ "fotos": [
+  {
+   "num": 1970,
+   "escena": "interior_1970",
+   "luz": "ambiente",
+   "bloques": 34387,
+   "neutro_awb": [
+    0.7805,
+    1.0,
+    0.4876
+   ]
+  },
+  {
+   "num": 1971,
+   "escena": "interior_1971",
+   "luz": "ambiente",
+   "bloques": 41300,
+   "neutro_awb": [
+    0.6352,
+    1.0,
+    0.5727
+   ]
+  },
+  {
+   "num": 1978,
+   "escena": "macropad",
+   "luz": "flash",
+   "bloques": 36152,
+   "neutro_awb": [
+    0.64,
+    1.0,
+    0.5676
+   ]
+  },
+  {
+   "num": 1979,
+   "escena": "macropad",
+   "luz": "flash",
+   "bloques": 37466,
+   "neutro_awb": [
+    0.6497,
+    1.0,
+    0.5676
+   ]
+  },
+  {
+   "num": 1980,
+   "escena": "macropad",
+   "luz": "ambiente",
+   "bloques": 35312,
+   "neutro_awb": [
+    1.1694,
+    1.0,
+    0.3059
+   ]
+  }
+ ],
+ "retenidas": [
+  {
+   "foto": 1970,
+   "escena": "interior_1970",
+   "luz": "ambiente",
+   "matriz": "m531_anterior",
+   "de2000_media": 4.561,
+   "de2000_mediana": 3.0,
+   "de2000_p90": 10.042,
+   "croma_ab_media": 3.795
+  },
+  {
+   "foto": 1970,
+   "escena": "interior_1970",
+   "luz": "ambiente",
+   "matriz": "c713",
+   "de2000_media": 4.936,
+   "de2000_mediana": 3.527,
+   "de2000_p90": 10.421,
+   "croma_ab_media": 4.174
+  },
+  {
+   "foto": 1970,
+   "escena": "interior_1970",
+   "luz": "ambiente",
+   "matriz": "identidad",
+   "de2000_media": 5.77,
+   "de2000_mediana": 4.719,
+   "de2000_p90": 10.455,
+   "croma_ab_media": 6.077
+  },
+  {
+   "foto": 1970,
+   "escena": "interior_1970",
+   "luz": "ambiente",
+   "matriz": "nueva_retenida",
+   "de2000_media": 4.447,
+   "de2000_mediana": 2.85,
+   "de2000_p90": 10.155,
+   "croma_ab_media": 3.603
+  },
+  {
+   "foto": 1971,
+   "escena": "interior_1971",
+   "luz": "ambiente",
+   "matriz": "m531_anterior",
+   "de2000_media": 2.654,
+   "de2000_mediana": 1.924,
+   "de2000_p90": 5.27,
+   "croma_ab_media": 3.356
+  },
+  {
+   "foto": 1971,
+   "escena": "interior_1971",
+   "luz": "ambiente",
+   "matriz": "c713",
+   "de2000_media": 2.666,
+   "de2000_mediana": 1.941,
+   "de2000_p90": 4.901,
+   "croma_ab_media": 3.297
+  },
+  {
+   "foto": 1971,
+   "escena": "interior_1971",
+   "luz": "ambiente",
+   "matriz": "identidad",
+   "de2000_media": 6.924,
+   "de2000_mediana": 6.392,
+   "de2000_p90": 11.155,
+   "croma_ab_media": 11.191
+  },
+  {
+   "foto": 1971,
+   "escena": "interior_1971",
+   "luz": "ambiente",
+   "matriz": "nueva_retenida",
+   "de2000_media": 2.053,
+   "de2000_mediana": 1.317,
+   "de2000_p90": 4.19,
+   "croma_ab_media": 2.521
+  },
+  {
+   "foto": 1978,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "m531_anterior",
+   "de2000_media": 3.151,
+   "de2000_mediana": 2.621,
+   "de2000_p90": 5.48,
+   "croma_ab_media": 3.742
+  },
+  {
+   "foto": 1978,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "c713",
+   "de2000_media": 2.588,
+   "de2000_mediana": 1.987,
+   "de2000_p90": 4.728,
+   "croma_ab_media": 2.661
+  },
+  {
+   "foto": 1978,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "identidad",
+   "de2000_media": 6.669,
+   "de2000_mediana": 6.001,
+   "de2000_p90": 10.606,
+   "croma_ab_media": 10.804
+  },
+  {
+   "foto": 1978,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "nueva_retenida",
+   "de2000_media": 2.616,
+   "de2000_mediana": 1.964,
+   "de2000_p90": 4.833,
+   "croma_ab_media": 2.905
+  },
+  {
+   "foto": 1979,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "m531_anterior",
+   "de2000_media": 3.025,
+   "de2000_mediana": 2.478,
+   "de2000_p90": 5.128,
+   "croma_ab_media": 3.292
+  },
+  {
+   "foto": 1979,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "c713",
+   "de2000_media": 2.745,
+   "de2000_mediana": 2.151,
+   "de2000_p90": 4.914,
+   "croma_ab_media": 3.008
+  },
+  {
+   "foto": 1979,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "identidad",
+   "de2000_media": 6.106,
+   "de2000_mediana": 6.003,
+   "de2000_p90": 8.989,
+   "croma_ab_media": 9.915
+  },
+  {
+   "foto": 1979,
+   "escena": "macropad",
+   "luz": "flash",
+   "matriz": "nueva_retenida",
+   "de2000_media": 2.434,
+   "de2000_mediana": 1.773,
+   "de2000_p90": 4.62,
+   "croma_ab_media": 2.527
+  },
+  {
+   "foto": 1980,
+   "escena": "macropad",
+   "luz": "ambiente",
+   "matriz": "m531_anterior",
+   "de2000_media": 3.226,
+   "de2000_mediana": 2.503,
+   "de2000_p90": 6.07,
+   "croma_ab_media": 3.069
+  },
+  {
+   "foto": 1980,
+   "escena": "macropad",
+   "luz": "ambiente",
+   "matriz": "c713",
+   "de2000_media": 3.82,
+   "de2000_mediana": 3.213,
+   "de2000_p90": 6.715,
+   "croma_ab_media": 3.575
+  },
+  {
+   "foto": 1980,
+   "escena": "macropad",
+   "luz": "ambiente",
+   "matriz": "identidad",
+   "de2000_media": 4.009,
+   "de2000_mediana": 3.533,
+   "de2000_p90": 6.493,
+   "croma_ab_media": 3.827
+  },
+  {
+   "foto": 1980,
+   "escena": "macropad",
+   "luz": "ambiente",
+   "matriz": "nueva_retenida",
+   "de2000_media": 3.05,
+   "de2000_mediana": 2.291,
+   "de2000_p90": 5.909,
+   "croma_ab_media": 2.713
+  }
+ ],
+ "pliegues": {
+  "interior_1970": {
+   "entreno": [
+    1971,
+    1978,
+    1979,
+    1980
+   ],
+   "ccm": [
+    [
+     1.7385,
+     -0.70937,
+     -0.02912
+    ],
+    [
+     -0.28169,
+     1.68895,
+     -0.40726
+    ],
+    [
+     -0.07777,
+     -0.51458,
+     1.59234
+    ]
+   ]
+  },
+  "interior_1971": {
+   "entreno": [
+    1970,
+    1978,
+    1979,
+    1980
+   ],
+   "ccm": [
+    [
+     1.68576,
+     -0.56721,
+     -0.11855
+    ],
+    [
+     -0.31584,
+     1.74891,
+     -0.43307
+    ],
+    [
+     -0.1358,
+     -0.4152,
+     1.551
+    ]
+   ]
+  },
+  "macropad": {
+   "entreno": [
+    1970,
+    1971
+   ],
+   "ccm": [
+    [
+     1.74003,
+     -0.80254,
+     0.06251
+    ],
+    [
+     -0.2689,
+     1.67005,
+     -0.40115
+    ],
+    [
+     -0.04283,
+     -0.57479,
+     1.61762
+    ]
+   ]
+  }
+ },
+ "resumen": {
+  "m531_anterior": {
+   "de2000_media_todas": 3.323,
+   "de2000_peor_foto": 4.561,
+   "de2000_media_macropad": 3.134,
+   "fotos_mejor_o_igual_que_anterior": 5
+  },
+  "c713": {
+   "de2000_media_todas": 3.351,
+   "de2000_peor_foto": 4.936,
+   "de2000_media_macropad": 3.051,
+   "fotos_mejor_o_igual_que_anterior": 2
+  },
+  "identidad": {
+   "de2000_media_todas": 5.896,
+   "de2000_peor_foto": 6.924,
+   "de2000_media_macropad": 5.595,
+   "fotos_mejor_o_igual_que_anterior": 0
+  },
+  "nueva_retenida": {
+   "de2000_media_todas": 2.92,
+   "de2000_peor_foto": 4.447,
+   "de2000_media_macropad": 2.7,
+   "fotos_mejor_o_igual_que_anterior": 5
+  }
+ },
+ "adoptada": true,
+ "ccm": [
+  [
+   1.73412,
+   -0.7057,
+   -0.02842
+  ],
+  [
+   -0.27821,
+   1.68179,
+   -0.40358
+  ],
+  [
+   -0.08057,
+   -0.50968,
+   1.59025
+  ]
+ ],
+ "ccm_anterior": [
+  [
+   1.43013,
+   -0.34631,
+   -0.08382
+  ],
+  [
+   -0.2075,
+   1.54443,
+   -0.33693
+  ],
+  [
+   0.22245,
+   -1.20159,
+   1.97913
+  ]
+ ],
+ "aviso": "la matriz anterior se ajustó con 1970/1971: en esas dos fotos no está retenida"
+}

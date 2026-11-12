@@ -419,8 +419,11 @@ PERFILES = {
 # Patrón medido: GBRG (verdes en (0,0)/(1,1), azul en (0,1), rojo en (1,0)). La heurística "R es el más
 # oscuro" daba GRBG; el ajuste RAW↔JPG de las fotos 1970/1971 lo corrigió (matriz diagonal con GBRG).
 CFA_M531 = 'GBRG'
-# CCM ajustada con las fotos 1970/1971 (cámara balanceada → sRGB lineal, filas suman 1). Provisional:
-# dos escenas de interior; refinar con una carta de color.
+# CCM_M531 (más abajo): cámara balanceada → sRGB lineal, filas suman 1. Ajustada con las cinco fotos de
+# modo 0 (1970, 1971, 1978–1980) por tools/ajustar_ccm.py (Huber, curva de tono por foto); dejando una
+# escena fuera da ΔE2000 medio 2,92 contra 3,32 de la anterior (1970/1971) y 3,35 de la C713; detalle en
+# firmware/stock/ccm_ajustada_v2.json. Reproduce el color del JPG de la cámara (incluye su saturación),
+# no una carta de color: sigue pendiente refinarla con una carta.
 # Balance fijo para modos cuyo JPG no sirve de referencia: media de los ajustes RAW↔JPG de 1970 y 1971
 # (interior, luz cálida). Provisional.
 NEUTRO_M531 = (0.7056, 1.0, 0.5292)
@@ -433,7 +436,7 @@ NEUTRO_M531_MODO4 = (0.62, 1.0, 0.60)
 LOCUS_A, LOCUS_B = -0.9243, -0.8826
 LOCUS_TOL = 0.20                    # distancia máxima en ln(nB) a la recta
 LOCUS_LN_R = (-0.74, 0.33)          # rango de ln(nR) visto en la cámara (−0,64…0,23) con 0,1 de margen
-CCM_M531 = np.array([[1.43013, -0.34631, -0.08382], [-0.2075, 1.54443, -0.33693], [0.22245, -1.20159, 1.97913]])
+CCM_M531 = np.array([[1.73412, -0.7057, -0.02842], [-0.27821, 1.68179, -0.40358], [-0.08057, -0.50968, 1.59025]])
 # Tabla del firmware (0x429c4c y copia en 0x42a24c, idéntica a la de la C713): código de 8 bits del RAW
 # → valor lineal de 10 bits. El negro ya viene restado (mínimo 0). Justo antes está la tabla inversa.
 DECODE_M531 = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79, 80, 81, 82, 83, 85, 86, 87, 88, 90, 91, 92, 94, 95, 96, 98, 99, 100, 102, 103, 105, 106, 108, 109, 111, 113, 114, 116, 118, 119, 121, 123, 125, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152, 154, 157, 159, 161, 164, 166, 168, 171, 173, 176, 178, 181, 183, 186, 189, 191, 194, 197, 200, 203, 206, 209, 212, 215, 218, 221, 224, 227, 231, 234, 237, 241, 244, 248, 251, 255, 259, 262, 266, 270, 274, 278, 282, 286, 290, 294, 298, 303, 307, 312, 316, 321, 325, 330, 335, 339, 344, 349, 354, 360, 365, 370, 375, 381, 386, 392, 397, 403, 409, 415, 421, 427, 433, 439, 446, 452, 459, 465, 472, 479, 486, 493, 500, 507, 514, 522, 529, 537, 545, 553, 560, 569, 577, 585, 594, 602, 611, 620, 629, 638, 647, 656, 666, 675, 685, 695, 705, 715, 725, 736, 746, 757, 768, 779, 790, 802, 813, 825, 837, 849, 861, 874, 886, 899, 912, 925, 939, 952, 966, 980, 994, 1008, 1023], dtype=np.uint16)
@@ -510,7 +513,7 @@ def main():
     ap.add_argument('--black', type=int)
     ap.add_argument('--white', type=int)
     ap.add_argument('--matriz', choices=['m531', 'c713'], default='m531',
-                    help='m531 = ajustada con fotos reales (provisional); c713 = la de la C713')
+                    help='m531 = ajustada con cinco fotos reales (tools/ajustar_ccm.py); c713 = la de la C713')
     ap.add_argument('--balance', choices=['auto', 'fijo'], default='auto',
                     help='modo 4: auto = por foto (parche blanco, con reserva al fijo); fijo = neutro de flash')
     ap.add_argument('--invertir-campos', action='store_true', help='el orden de los campos no se detecta; usar si los colores salen cambiados')
