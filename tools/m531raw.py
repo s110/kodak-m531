@@ -365,6 +365,8 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
 PERFILES = {
     28_200_960: dict(packing='u16_le', ancho=4320),            # modo de captura 3 (rompe el JPEG)
     14_100_480: dict(packing='u8', ancho=4320, decodificar=True),  # modo normal: 8 bits comprimidos
+    21_150_720: dict(bits=12, ancho=4320),  # modo 4: 12 bits empaquetado (orden de bits a detectar)
+    17_625_600: dict(bits=10, ancho=4320),  # modo 2: 10 bits empaquetado
 }
 # Patrón medido: GBRG (verdes en (0,0)/(1,1), azul en (0,1), rojo en (1,0)). La heurística "R es el más
 # oscuro" daba GRBG; el ajuste RAW↔JPG de las fotos 1970/1971 lo corrigió (matriz diagonal con GBRG).
@@ -381,7 +383,11 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
     datos = [open(r, 'rb').read() for r in rutas]
     perfil = PERFILES.get(len(datos[0])) if packing is None and ancho is None and len(datos) == 1 else None
     if perfil:
-        packing, ancho = perfil['packing'], perfil['ancho']
+        ancho = perfil['ancho']
+        packing = perfil.get('packing')
+        if packing is None:  # perfil con bits conocidos pero orden de empaquetado por detectar
+            cands = [c for c in detectar_formato(datos[0]) if c['bits'] == perfil['bits']]
+            packing = cands[0]['packing'] if cands else f"p{perfil['bits']}_msb"
     decodificar = bool(perfil and perfil.get('decodificar'))
     if perfil and cfa is None:
         cfa = CFA_M531

@@ -29,7 +29,8 @@ sys.path.insert(0, AQUI)
 from km531fw import ZONAS_INTOCABLES  # noqa: E402
 
 PEEK32, POKE32, FLUSH = 0x198bbc, 0x2e8a84, 0x24e140
-NARGS = {PEEK32: 1, POKE32: 2, FLUSH: 2}
+SETMODO = 0x6e0b0  # escribe el modo de captura (palabra 0x3d97a8, sólo RAM); valores válidos 0–4
+NARGS = {PEEK32: 1, POKE32: 2, FLUSH: 2, SETMODO: 1}
 ZONAS_PROHIBIDAS = ZONAS_INTOCABLES + [(0x0, 0x48000, 'vectores y pilas')]
 RAM_MAX = 0x4000000
 CLAVES = {'REM', 'LET', 'END', 'IF', 'THEN', 'ELSE', 'GOTO', 'GOSUB', 'RETURN', 'SYSTEM', 'FOREIGN',
@@ -82,7 +83,7 @@ def _validar_llamada(kw, f, args, variables, err):
         v = [int(a) for a in args]
         fn, nargs, outpos, dest = v[0], v[1], v[2], v[3]
         if fn not in NARGS:
-            err(f'Run_SpecifyFunc a {fn:#x}, sólo peek32/poke32/flush')
+            err(f'Run_SpecifyFunc a {fn:#x}, sólo peek32/poke32/flush/modo')
             return
         if nargs != NARGS[fn] or outpos != 0:
             err(f'nargs/outpos inválidos para {fn:#x} ({nargs}, {outpos})')
@@ -90,6 +91,10 @@ def _validar_llamada(kw, f, args, variables, err):
             err('argumentos sobrantes de Run_SpecifyFunc distintos de 0')
         if fn == FLUSH and not (0 < v[4] <= 0x10000):
             err(f'flush con longitud {v[4]} fuera de rango')
+        if fn == SETMODO:
+            if not 0 <= dest <= 4:
+                err(f'modo de captura {dest} fuera de 0–4')
+            return
         if not 0 <= dest < RAM_MAX or dest % 4:
             err(f'dirección {dest:#x} fuera de RAM o desalineada')
         if fn == POKE32:

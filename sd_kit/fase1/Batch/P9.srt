@@ -1,0 +1,7 @@
+10 REM P9: RAW + modo de captura 4 (12 bits empaquetado, el IRP lo acepta)
+20 FOREIGN SaveCFAonTake(1)
+30 FOREIGN r = Run_SpecifyFunc(450736, 1, 0, 4, 0, 0, 0, 0, 0)
+40 FOREIGN c = Run_SpecifyFunc(1674172, 1, 0, 4036520, 0, 0, 0, 0, 0)
+50 LOG_PRINT VERIFY c
+60 END
+RUN

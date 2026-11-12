@@ -326,3 +326,18 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   Comparación visual: `dump/raw2/comparacion_matrices.png`.
 - La orientación: el RAW sale en la orientación del sensor; el JPG lo rota la cámara (sensor de
   orientación). No se fuerza rotación en el DNG.
+
+## Modo de 12 bits sin romper el JPEG (Fable, 2026-11-11) — por probar
+
+- El JPG de 224 B sale de `0x15714c` cuando el IRP no arranca. Error `0x03300003` del validador
+  `0x2b0160`: la línea de entrada supera `0x1ffc` B. Modos 1 y 3 (16 bits) → 8640 B/línea → fallan.
+- Modo de captura → formato IRP (`0x128344`): 0→0 (8 b), 1→5, 2→1 (10 b empaquetado, 5400 B/línea),
+  3→6, 4→2 (**12 b empaquetado, 6480 B/línea, pasa**). RAW esperado en modo 4: 21.150.720 B;
+  en modo 2: 17.625.600 B. Registro del sensor `0x0ff10080` (`0x17ac50`/`0x17ace8`).
+- Vista previa roja (sospecha fuerte): el IRP de previsualización (`0x128542`) también toma el modo
+  global mientras el sensor queda en 8 bits. Puede seguir dañada en modo 4. Cuelgue de la 2.ª foto:
+  causa sin determinar (sospechas: vista previa mal formateada; parada incompleta en `0x129a1c`).
+- P9: `SaveCFAonTake(1)` + `Run_SpecifyFunc(0x6e0b0, 1, 0, 4, …)` (setter de modo, sólo RAM),
+  registra el modo (esperado 4). El verificador admite ese destino con valores 0–4.
+- Conversor: perfiles 21.150.720 (12 b) y 17.625.600 (10 b) con orden de empaquetado detectado
+  (probado con mosaicos sintéticos p12_msb y p12_lsb de 4320×3264).
