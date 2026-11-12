@@ -1,10 +1,17 @@
 Fase 3: JPEG sin realce de bordes del ASIC (sólo RAM, se pierde al apagar).
 
-Batch/BatchScripts.txt corre P8 (RAW de 8 bits + JPG normal) y luego EE0.
-EE0 redirige la curva de realce de la banda ISO <= 159 con Sharpness Normal a una zona de ceros, con
-guardia: si el valor no es el de fábrica (0x4443d0) no escribe nada. Log esperado en EE0.LOG:
+A la SD van sólo tres archivos de Batch/: BatchScripts.txt, P8.srt y EE0.srt.
+BatchScripts.txt corre P8 (RAW de 8 bits + JPG normal) y luego EE0.
+EE0 redirige la curva de realce de la banda ISO <= 159 con Sharpness Normal (literal 0x1b3d80, que
+apunta a la tabla 0x4443d0, curva 0→50) a la tabla de ceros del propio firmware en 0x444018, con
+guardia: si el valor no es el de fábrica no escribe nada. Log esperado en EE0.LOG:
   VERIFY: 4473808   (antes)
   VERIFY: 4472856   (después)
+Si sólo aparece la primera línea con otro número, la guardia no dejó escribir.
+
+EE0 es la primera vez que corren en la cámara un IF y poke32 (0x2e8a84). Los dos están leídos en el
+desensamblado, pero si la cámara se queda congelada al encender: sacar batería y SD, borrar EE0 de
+BatchScripts.txt en el Mac y avisar.
 
 Prueba: misma escena con detalle fino (texto, tela), trípode o apoyo, ISO fijo 80 o 100, Sharpness
 Normal, sin zoom digital.
@@ -13,9 +20,13 @@ Normal, sin zoom digital.
 Comparar bordes y halos en los JPG. El RAW no cambia (el realce sólo afecta al JPG).
 No toca: otras bandas de ISO, Sharpness Bajo/Alto, ASharp (segundo realce) ni la reducción de ruido.
 
-Variantes (no están en BatchScripts.txt; agregarlas una a una después de probar EE0):
-  EET      realce a cero en las 11 bandas de ISO (Sharpness Normal). Usa GOTO suelto: experimental.
-  ASHARP0  apaga el segundo realce (ASharp) con un parche de código en 0x128900. Experimental.
+Variantes (NO están en BatchScripts.txt y no se copian a la SD todavía):
+  EET      realce a cero en las 11 bandas de ISO (Sharpness Normal). Usa variables de dos letras
+           (sin probar en la cámara). Agregar sólo después de que EE0 funcione.
+  ASHARP0  apaga el segundo realce (ASharp) con un parche de código en 0x128900.
   NRE0     apaga la reducción de ruido multiescala (NRE) en 0x128890: más grano y manchas de color.
-           Experimental: la variante sin NRE no está probada con 14 MP; si falla, JPG de 224 B o cuelgue.
-Todas tienen guardia sobre el valor de fábrica y dejan el resultado en su .LOG. Se pierden al apagar.
+           La variante sin NRE no está probada con 14 MP; si falla, JPG de 224 B o cuelgue.
+ASHARP0 y NRE0 usan peek16/poke16 (0x736e6, 0x13f09a) y el vaciado de caché (0x24e140), que todavía
+no corrieron en la cámara: probarlos de a uno, después de EE0.
+Ninguna usa GOTO ni números negativos: guardia con "IF v == N THEN línea"; si falla, anota la
+lectura y termina con END. Todas dejan el resultado en su .LOG y se pierden al apagar.

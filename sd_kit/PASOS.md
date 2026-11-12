@@ -32,15 +32,24 @@ Antes de empezar: batería cargada. Cámara fuera del USB salvo donde se indique
 1. Con el kit en la SD, enciende (P4 deja activo el RAW hasta apagar).
    Si los scripts no corrieron solos: menú oculto → DEBUG → SaveCCDRawOnTake → On.
 2. Toma 3 fotos: una carta gris o pared blanca con luz de día, una escena con detalle, una con poca luz.
-3. Trae la SD: aparecerán `101O####.raw` y `101b####.raw` junto a cada JPG.
-4. Claude corre `tools/m531raw.py info` sobre cada par y calibra negro, blanco, CFA (R vs B) y la
-   matriz de color con la foto gris y su JPG.
+3. Trae la SD: aparece un `101O####.RAW` junto a cada JPG.
+4. Claude convierte la carpeta con `tools/convertir_carpeta.py` (DNG con balance por foto).
 
 ## Paso 4 — Fase 2 (sólo si P4 y P5 funcionaron con la sintaxis usada)
 1. La fase 2 **reemplaza** `Batch/` de la fase 1 (no se mezclan: MEMRW debe correr antes de que
    cualquier otro script ejecute código de la misma línea de caché, `0x2d6600–0x2d663f`).
-2. Si alguna sintaxis falló, Claude regenera MEMRW con la que funcionó (`tools/patch2srt.py`).
+2. MEMRW usa `peek16`/`poke16` y el vaciado de caché, que todavía no corrieron en la cámara:
+   va después de que EE0 (fase 3) confirme `IF` y `poke32`. Se regenera con `tools/patch2srt.py`.
 3. Encender: debe verse "MEMRW OK" y "MEMRWT OK". Apagar y sacar la batería: el parche desaparece.
+
+## Paso 5 — Fase 3: JPG sin realce (P8 + EE0)
+1. Claude corre el verificador sobre `sd_kit/fase3/Batch` y copia a `Batch/` de la SD sólo
+   `BatchScripts.txt` (P8, EE0), `P8.srt` y `EE0.srt`; verifica la copia y compara hashes.
+2. Foto A con el kit anterior (P8 solo) y foto B con P8 + EE0: misma escena con detalle fino, ISO
+   fijo 80 o 100, Sharpness Normal. Detalle en `fase3/LEEME.txt`.
+3. `Batch/EE0.LOG` debe decir `VERIFY: 4473808` y luego `VERIFY: 4472856`.
+4. Si la cámara se congela al encender: sacar batería y SD, quitar EE0 de `BatchScripts.txt`.
+   EE0 es el primer script con `IF` y con `poke32` que corre en la cámara.
 
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los

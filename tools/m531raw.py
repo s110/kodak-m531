@@ -252,6 +252,33 @@ def neutro_mundo_gris(img, cfa, negro, blanco):
     return tuple(min(max(medias[c] / medias['G'], 0.05), 4.0) for c in 'RGB')
 
 
+def neutro_creible(neutro):
+    """¿Está el neutro cerca de los balances que la cámara elige de verdad (ver LOCUS_*)? Filtra los
+    resultados del parche blanco cuando lo más claro de la escena tiene color propio."""
+    if neutro is None or min(neutro) <= 0:
+        return False
+    x, y = np.log(neutro[0] / neutro[1]), np.log(neutro[2] / neutro[1])
+    return bool(LOCUS_LN_R[0] <= x <= LOCUS_LN_R[1] and abs(y - (LOCUS_A + LOCUS_B * x)) <= LOCUS_TOL)
+
+
+def awb_camara(ruta_raw):
+    """Ganancias R, G, B (÷256) del AWB de la cámara, leídas del MakerNote del JPG hermano; None si no hay.
+    En modo 0 coinciden con el ajuste RAW↔JPG. En modo 4 no sirven de balance: sin flash la cámara deja el
+    valor por omisión (400, 256, 456) y con flash salen corridas (ver NOTAS.md). Sólo se informa."""
+    d, n = os.path.split(ruta_raw)
+    try:
+        from PIL import Image
+        mk = Image.open(os.path.join(d, n[:3] + '_' + n[4:8] + '.JPG')).getexif().get_ifd(0x8769).get(0x927c)
+        if not mk or len(mk) < 0x21ac:
+            return None
+        g = struct.unpack_from('<3I', mk, 0x1318)
+        if g != struct.unpack_from('<3I', mk, 0x21a0) or not (200 <= g[1] <= 512 and all(100 <= v <= 4096 for v in g)):
+            return None
+        return list(g)
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------- DNG
 _CFA = {'RGGB': (0, 1, 1, 2), 'BGGR': (2, 1, 1, 0), 'GRBG': (1, 0, 2, 1), 'GBRG': (1, 2, 0, 1)}
 # Matriz provisional XYZ(D65)→cámara: inversa de la CCM de luz de día de la C713 (misma
@@ -384,7 +411,7 @@ PERFILES = {
     14_100_480: dict(packing='u8', ancho=4320, decodificar=True),  # modo normal: 8 bits comprimidos
     # modo 4: contenedor de 12 bits empaquetado (orden lsb medido), datos de 10 bits lineales con el negro
     # ya restado (máximo 1020 en las fotos 1972–1974). El JPG de este modo sale con el color corrido:
-    # el balance no se toma de él.
+    # el balance no se toma de él, sino de la propia escena (parche blanco) con reserva a un neutro fijo.
     21_150_720: dict(bits=12, ancho=4320, blanco=1023, negro=0, balance_jpg=False, neutro='modo4',
                      decodificar10=True),
     17_625_600: dict(bits=10, ancho=4320),  # modo 2: 10 bits empaquetado
@@ -397,9 +424,15 @@ CFA_M531 = 'GBRG'
 # Balance fijo para modos cuyo JPG no sirve de referencia: media de los ajustes RAW↔JPG de 1970 y 1971
 # (interior, luz cálida). Provisional.
 NEUTRO_M531 = (0.7056, 1.0, 0.5292)
-# Modo 4: medido sobre una tecla casi blanca (fotos 1976/1977, luz de interior). Los canales llegan con
-# otras ganancias que en el modo 0. Provisional hasta tener el par modo 0 / modo 4 de la misma escena.
-NEUTRO_M531_MODO4 = (0.62, 1.0, 0.60)  # pares con flash 1976↔1978 y 1977↔1979, tras decodificar con la curva de 10 bits
+# Modo 4, balance de reserva: pares con flash 1976↔1978 y 1977↔1979, tras decodificar con la curva de
+# 10 bits. Se usa si el balance por foto (parche blanco) no da un resultado creíble, o con --balance fijo.
+NEUTRO_M531_MODO4 = (0.62, 1.0, 0.60)
+# Lugar de los balances que elige la propia cámara: ganancias R/G/B del AWB guardadas en el MakerNote de
+# 67 JPG de modo 0 (fotos 1900–1971). En log caen sobre una recta: ln(nB) = LOCUS_A + LOCUS_B·ln(nR),
+# rms 0,028; el extremo cálido se aparta hasta 0,12. Un neutro estimado se acepta sólo si queda cerca.
+LOCUS_A, LOCUS_B = -0.9243, -0.8826
+LOCUS_TOL = 0.20                    # distancia máxima en ln(nB) a la recta
+LOCUS_LN_R = (-0.74, 0.33)          # rango de ln(nR) visto en la cámara (−0,64…0,23) con 0,1 de margen
 CCM_M531 = np.array([[1.43013, -0.34631, -0.08382], [-0.2075, 1.54443, -0.33693], [0.22245, -1.20159, 1.97913]])
 # Tabla del firmware (0x429c4c y copia en 0x42a24c, idéntica a la de la C713): código de 8 bits del RAW
 # → valor lineal de 10 bits. El negro ya viene restado (mínimo 0). Justo antes está la tabla inversa.
@@ -478,6 +511,8 @@ def main():
     ap.add_argument('--white', type=int)
     ap.add_argument('--matriz', choices=['m531', 'c713'], default='m531',
                     help='m531 = ajustada con fotos reales (provisional); c713 = la de la C713')
+    ap.add_argument('--balance', choices=['auto', 'fijo'], default='auto',
+                    help='modo 4: auto = por foto (parche blanco, con reserva al fijo); fijo = neutro de flash')
     ap.add_argument('--invertir-campos', action='store_true', help='el orden de los campos no se detecta; usar si los colores salen cambiados')
     a = ap.parse_args()
     if len(a.archivos) > 2:
@@ -514,7 +549,15 @@ def main():
     if neutro:
         info['balance'] = 'jpg'
     elif pf.get('neutro') == 'modo4':
-        neutro, info['balance'] = NEUTRO_M531_MODO4, 'fijo_modo4'
+        # Balance por foto: lo más claro de la escena, aceptado sólo si cae cerca de los balances que la
+        # cámara elige. Error medido contra el AWB de la cámara en 10 fotos (modo 0 y pares de modo 4):
+        # media 8 %, peor 18 %. El JPG rosado y su AWB no sirven de referencia en este modo.
+        neutro = None if a.balance == 'fijo' else neutro_parche_blanco(img, info['cfa'], negro, blanco)
+        if neutro_creible(neutro):
+            info['balance'] = 'parche_blanco'
+        else:
+            info['parche_blanco_descartado'] = None if neutro is None else [round(x, 4) for x in neutro]
+            neutro, info['balance'] = NEUTRO_M531_MODO4, 'fijo_modo4'
     elif pf.get('balance_jpg') is False:
         neutro = neutro_parche_blanco(img, info['cfa'], negro, blanco)
         info['balance'] = 'parche_blanco' if neutro else 'fijo_m531'
@@ -522,6 +565,7 @@ def main():
     else:
         neutro, info['balance'] = neutro_mundo_gris(img, info['cfa'], negro, blanco), 'mundo_gris'
     info['neutro'] = [round(x, 4) for x in neutro]
+    info['awb_camara'] = awb_camara(a.archivos[0])
     info['matriz'] = a.matriz
     info['orientacion'] = orientacion_jpg(a.archivos[0])
     escribir_dng(a.salida, img, info['cfa'], negro, blanco, neutro=neutro, orientacion=info['orientacion'],

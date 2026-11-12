@@ -6,6 +6,7 @@ formatos, partidos en dos campos, y los pasa por la CLI sin pistas. Exige:
   * detección correcta de empaquetado, ancho, disposición de campos y patrón CFA;
   * que LibRaw (rawpy) abra el DNG y su raw_image sea idéntico, píxel a píxel, al mosaico original;
   * que LibRaw revele el DNG a RGB sin error.
+  * con las fotos reales de dump/ (si están): balance por foto del modo 4 contra el par de modo 0.
 Deja un artefacto verificable en work/e2e_raw/: reporte JSON con hashes y vistas previas PNG.
 
 uso: .venv/bin/python tools/e2e_raw.py [FOTO.jpg]
@@ -86,6 +87,62 @@ def partir(m, layout):
     return [m[:H // 2], m[H // 2:]]
 
 
+def _cli_dng(raw, dng):
+    p = subprocess.run([sys.executable, os.path.join(AQUI, 'm531raw.py'), 'dng', raw, '-o', dng],
+                       capture_output=True, text=True)
+    if p.returncode:
+        raise RuntimeError(p.stderr[-300:])
+    return json.loads(p.stdout)
+
+
+def balance_modo4(reporte):
+    """Balance por foto del modo 4 con fotos reales (dump/, fuera del repo; se omite si no están).
+
+    Verdad independiente: la misma escena tomada en modo 0, cuyo balance sale del JPG bueno de la cámara.
+    Exige que el neutro del RAW de modo 4 quede a menos de TOL (en ln, canales R y B) del de su par, con
+    y sin flash, y que una escena cuyo punto más claro es verde puro caiga al neutro fijo (no se acepta
+    un balance que la cámara nunca elegiría). Devuelve el número de fallos."""
+    TOL = 0.15
+    d = os.path.join(RAIZ, 'dump')
+    pares = [('raw6/101O1981.RAW', 'raw5/101O1980.RAW', 'sin flash'), ('raw4/101O1975.RAW', 'raw5/101O1980.RAW', 'sin flash'),
+             ('raw6/101O1982.RAW', 'raw5/101O1978.RAW', 'flash'), ('raw4/101O1976.RAW', 'raw5/101O1978.RAW', 'flash')]
+    if not all(os.path.exists(os.path.join(d, r)) for par in pares for r in par[:2]):
+        reporte['balance_modo4'] = 'omitido: faltan las fotos de dump/'
+        print('OMITIDO balance modo 4 (faltan las fotos de dump/)')
+        return 0
+    fallos, filas = 0, []
+    tmp = os.path.join(SALIDA, 'balance_tmp.dng')
+    for m4, m0, luz in pares:
+        a, b = _cli_dng(os.path.join(d, m4), tmp), _cli_dng(os.path.join(d, m0), tmp)
+        dist = max(abs(float(np.log(a['neutro'][i] / b['neutro'][i]))) for i in (0, 2))
+        ok = a['balance'] == 'parche_blanco' and b['balance'] == 'jpg' and dist < TOL
+        fallos += not ok
+        filas.append(dict(modo4=m4, modo0=m0, luz=luz, neutro_modo4=a['neutro'], balance_modo4=a['balance'],
+                          neutro_modo0=b['neutro'], balance_modo0=b['balance'], distancia_ln=round(dist, 4), ok=ok))
+        print(('OK   ' if ok else 'FALLO'), 'balance modo 4', m4, luz, a['neutro'], 'vs', b['neutro'], f'd={dist:.3f}')
+    # escena real con los canales R y B hundidos: lo más claro es verde y el parche blanco no es creíble
+    from importlib import util
+    spec = util.spec_from_file_location('m531raw', os.path.join(AQUI, 'm531raw.py'))
+    mod = util.module_from_spec(spec); spec.loader.exec_module(mod)
+    img, info = mod.analizar([os.path.join(d, pares[0][0])])
+    verde = img.astype(np.float64)
+    verde[1::2, 0::2] *= 0.15   # R en GBRG
+    verde[0::2, 1::2] *= 0.15   # B en GBRG
+    # de vuelta a códigos de 10 bits (inversa de la curva) y a 12 bits empaquetados lsb, como los escribe la cámara
+    cod = np.round(np.interp(verde, mod.DECODE_M531.astype(np.float64), np.arange(256) * 4.0)).astype(np.uint16)
+    falso = os.path.join(SALIDA, '101O9999.RAW')
+    open(falso, 'wb').write(empaquetar(cod, 'p12_lsb', 12))
+    c = _cli_dng(falso, tmp)
+    os.remove(falso); os.remove(tmp)
+    ok = c['balance'] == 'fijo_modo4' and c['neutro'] == [0.62, 1.0, 0.6] and c['packing'] == 'p12_lsb'
+    fallos += not ok
+    filas.append(dict(caso='escena verde: reserva al neutro fijo', balance=c['balance'], neutro=c['neutro'],
+                      descartado=c.get('parche_blanco_descartado'), ok=ok))
+    print(('OK   ' if ok else 'FALLO'), 'balance modo 4 escena verde →', c['balance'], 'descartado', c.get('parche_blanco_descartado'))
+    reporte['balance_modo4'] = dict(tolerancia_ln=TOL, casos=filas)
+    return fallos
+
+
 def main():
     global W, H
     os.makedirs(SALIDA, exist_ok=True)
@@ -141,6 +198,7 @@ def main():
                         negro_detectado=info['negro'], candidatos=info['candidatos'][:2])
             reporte['casos'].append(caso)
             print(('OK   ' if ok else 'FALLO'), base, '' if ok else det, '' if rb_ok else '(R/B invertidos: heurística)')
+    fallos += balance_modo4(reporte)
     total = len(reporte['casos'])
     reporte['resultado'] = 'OK' if not fallos else f'{fallos} fallo(s) de {total}'
     reporte['rb_heuristica_acierta'] = f"{sum(1 for c in reporte['casos'] if c.get('rb_ok'))} de {total}"

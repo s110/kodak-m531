@@ -1,12 +1,15 @@
-10 REM NRE0: parche en RAM de 1 palabra(s); se pierde al apagar
-20 FOREIGN v0 = Run_SpecifyFunc(1674172, 1, 0, 1214608, 0, 0, 0, 0, 0)
-30 IF v0 == -232726400 THEN 50
-40 GOTO 9000
-50 FOREIGN r0 = Run_SpecifyFunc(3050116, 2, 0, 1214608, -266280832, 0, 0, 0, 0)
-60 FOREIGN f0 = Run_SpecifyFunc(2416960, 2, 0, 1214608, 4, 0, 0, 0, 0)
-70 FOREIGN c0 = Run_SpecifyFunc(1674172, 1, 0, 1214608, 0, 0, 0, 0, 0)
-80 LOG_PRINT VERIFY c0
+10 REM NRE0: parche en RAM de 1 mitad(es) de 16 bits; se pierde al apagar
+20 FOREIGN a = Run_SpecifyFunc(472806, 1, 0, 1214608, 0, 0, 0, 0, 0)
+30 IF a == 57472 THEN 60
+40 LOG_PRINT VERIFY a
+50 END
+60 FOREIGN b = Run_SpecifyFunc(472806, 1, 0, 1214610, 0, 0, 0, 0, 0)
+70 IF b == 61984 THEN 100
+80 LOG_PRINT VERIFY b
 90 END
-9000 LOG_PRINT VERIFY v0
-9010 END
+100 FOREIGN c = Run_SpecifyFunc(1306778, 2, 0, 1214610, 61472, 0, 0, 0, 0)
+110 FOREIGN d = Run_SpecifyFunc(2416960, 2, 0, 1214608, 4, 0, 0, 0, 0)
+120 FOREIGN e = Run_SpecifyFunc(472806, 1, 0, 1214610, 0, 0, 0, 0, 0)
+130 LOG_PRINT VERIFY e
+140 END
 RUN

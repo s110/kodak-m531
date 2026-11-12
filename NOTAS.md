@@ -404,3 +404,60 @@ Secciones anteriores que quedan superadas (no se reescriben para conservar el hi
   la NAND salvo que luego se confirme Sharpness en el menú (equivale a elegirlo a mano).
 - Corrección: `0x5dbd0` es el paso de zoom, no el nivel de ISO.
 - Kit `sd_kit/fase3`: P8 + EE0 (realce a cero en ISO ≤159 Normal), verificado contra la RAM.
+
+## Balance de blancos por foto en modo 4 (2026-11-12)
+
+- **El AWB de la cámara queda en el MakerNote del JPG**: ganancias R, G, B (÷256) como tres u32 en los
+  desplazamientos `0x1318` y `0x21a0` del MakerNote (copias u16 en `0x483e` y `0x4c74`). En modo 0
+  coinciden con el ajuste RAW↔JPG: 1978 = (400, 256, 451) → neutro (0,640, 1, 0,568) contra (0,639, 1,
+  0,578) del ajuste; 1980 = (248, 290, 948) → (1,169, 1, 0,306) contra (1,157, 1, 0,322).
+- **Idea descartada: sacar el balance del JPG rosado del modo 4.** Sin flash, la cámara deja en modo 4
+  el valor por omisión (400, 256, 456) — el mismo en 1975 y 1981, y el mismo de la 1920 en modo 0 —
+  cuando la luz real pide (248, 290, 948): el AWB no llega a calcularse (la vista previa tiene el
+  formato equivocado) y el JPG no lleva información de la luz. Con flash sí se mueve, con un corrimiento
+  estable en la única escena con par (verdad ÷ modo 4: R 1,19–1,25, B 0,870–0,874 en 1976, 1977, 1982);
+  aplicado a las fotos sin flash da (0,78, 1, 0,49) contra (1,17, 1, 0,31): error de 40–47 %.
+  El ajuste RAW↔JPG tampoco sirve: sobre datos decodificados da correlación < 0,9 en 7 de 8 fotos y
+  neutros negativos en 3; sobre códigos sin decodificar da B ≈ 0,62 constante con y sin flash.
+- **Método elegido: parche blanco sobre el RAW** (`neutro_parche_blanco`, 2 % más claro sin saturar),
+  aceptado sólo si cae cerca del lugar de los balances que la cámara elige. Ese lugar sale del
+  MakerNote de 67 JPG de modo 0 (1900–1971): ln(nB) = −0,924 − 0,883·ln(nR), rms 0,028. Fuera de
+  ±0,20 o del rango de ln(nR) −0,74…0,33, cae al neutro fijo (0,62, 1, 0,60).
+- Error contra el AWB de la cámara (máximo de |ln| en R y B) en 10 fotos con verdad independiente
+  (modo 0: 1970, 1971, 1978–1980; modo 4 con par: 1975–1977, 1981, 1982): parche blanco media 0,083,
+  peor 0,18; mundo gris media 0,16, peor 0,31; proyectar sobre la recta no mejora (0,10 / 0,20).
+  Foto 1981 (sin flash): (1,091, 1, 0,323) contra (1,157, 1, 0,322) de la 1980; antes salía naranja
+  con (0,62, 1, 0,60). Comparación: `dump/raw6/balance_por_foto.png`.
+- `m531raw.py dng` informa `awb_camara` y acepta `--balance fijo`. `e2e_raw.py` compara el neutro de
+  cuatro RAW de modo 4 con su par de modo 0 (tolerancia 0,15) y exige la caída al fijo en una escena
+  cuyo punto más claro es verde.
+
+## Revisión de los kits de la SD (2026-11-12)
+
+- **Ningún `IF` corrió todavía en la cámara.** Los .LOG de P0, P6, P8 y P9 sólo prueban
+  `FOREIGN v = Run_SpecifyFunc`, `FOREIGN f(x)`, `LOG_PRINT VERIFY` y `END`. EE0 es el primer script con
+  `IF` y con `poke32` (`0x2e8a84` = `j_s.d [blink]; st_s r1,[r0,0]`).
+- **`IF` leído en el desensamblado** (`0x107578`): corta en `THEN`, recorta espacios (`0x1996f4`),
+  evalúa la condición con `0x19943c` y exige resultado booleano; si es cierta ejecuta `GOTO` + destino
+  por `0x1071ec`, el mismo camino de un `GOTO` suelto. El evaluador `0x1991f4` prueba los operadores en
+  el orden de la tabla `0x442630` (`&& || >= <= == != ! > < + - * / % ^ ~ & |`), parte en el primero
+  que aparece y exige que cada lado sea un símbolo simple (`0x1990d0`: sólo dígitos, decimal con un
+  punto, TRUE/FALSE, cadena o variable).
+- **Un literal negativo como operando detiene la CPU**: en `v == -670990368` el lado derecho no es
+  ningún símbolo válido. Los MEMRW, ASHARP0 y NRE0 anteriores tenían esa comparación: habrían congelado
+  la cámara. `patch2srt.py` ahora trabaja por mitades de 16 bits con `peek16` = `0x736e6`
+  (`j_s.d [blink]; ldw_s r0,[r0,0]`) y `poke16` = `0x13f09a` (`j_s.d [blink]; stw_s r1,[r0,0]`), sin
+  números negativos, sin GOTO y con variables de una letra; los tres scripts están regenerados.
+- EET reescrito sin GOTO: las 11 guardias primero (si una falla, anota y termina), luego las 11
+  escrituras y las 11 relecturas.
+- `check_scripts.py` rechaza ahora: `IF` que no sea `IF var == ENTERO_SIN_SIGNO THEN línea`, argumentos
+  negativos o mayores que 2147483647 en `Run_SpecifyFunc`, GOTO/GOSUB/RETURN/ELSE/LET, y líneas sin
+  CRLF. Admite `peek16`/`poke16` con las mismas zonas intocables.
+- EE0 verificado: `0x1b3d80` vale `0x4443d0` en el código de fábrica y en la RAM, y lo carga una sola
+  instrucción (`0x1b3ae0`, rama ISO ≤ 159, destino `[r2+0x38]`); `0x4443d0` es la curva 0→50 de 35
+  puntos u16; `0x444018` es una tabla de ceros del firmware (literal `0x1b3d48`), con ceros hasta
+  `0x4440e3`. Las 11 direcciones de EET y las guardias de MEMRW/ASHARP0/NRE0 coinciden con la RAM.
+- La única palabra del código que difiere entre `rec0_code_0x48000.bin` y la RAM es `0x38ac4c`
+  (0 contra 0x08000000); ningún script la toca.
+- SD: copiados `BatchScripts.txt` (P8, EE0), `P8.srt` y `EE0.srt`. Los .LOG anteriores quedaron en
+  `dump/raw7/` (no había fotos nuevas después de la 1982).

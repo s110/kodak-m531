@@ -10,8 +10,16 @@ Regla general: todo lo que no esté explícitamente permitido es un error. En co
     `PALABRA_CLAVE Nombre(args)` (sin paréntesis, con coma en medio, etc.);
   * la palabra clave no corresponde a la tabla de la función;
   * los argumentos no cumplen el esquema de esa función (sólo enteros literales en rango, cadenas
-    sin barra invertida o, donde se admite, una variable). Run_SpecifyFunc: 9 enteros literales,
-    destino peek32/poke32/flush, nargs exacto, outpos 0 y destino fuera de zonas intocables;
+    sin barra invertida o, donde se admite, una variable). Run_SpecifyFunc: 9 enteros literales SIN
+    signo, destino peek32/poke32/peek16/poke16/flush/modo, nargs exacto, outpos 0 y destino fuera de
+    zonas intocables;
+  * un IF no tiene exactamente la forma `IF var == ENTERO_SIN_SIGNO THEN línea`. El evaluador
+    (0x1991f4) parte la condición en el primer operador de su tabla y exige que cada lado sea un
+    símbolo simple: dígitos, TRUE/FALSE, cadena o variable (0x1990d0). `v == -5` deja "-5" como
+    símbolo desconocido y detiene la CPU. Las palabras con el bit 31 se comparan y escriben por
+    mitades de 16 bits (peek16/poke16);
+  * aparece una sentencia que nunca corrió en la cámara: GOTO, GOSUB, RETURN, ELSE, LET;
+  * una línea no termina en CRLF (todos los scripts que corrieron en la cámara lo usan);
   * un LET crea una variable con nombre de función o palabra clave;
   * hay números con ceros a la izquierda, comillas desparejas o barras invertidas en cadenas;
   * GOTO/GOSUB/THEN saltan a algo que no es una línea existente;
@@ -29,8 +37,16 @@ sys.path.insert(0, AQUI)
 from km531fw import ZONAS_INTOCABLES  # noqa: E402
 
 PEEK32, POKE32, FLUSH = 0x198bbc, 0x2e8a84, 0x24e140
+# Mitades de 16 bits, para palabras con el bit 31 (no hay literal decimal sin signo que las exprese):
+# 0x736e6 = `j_s.d [blink]; ldw_s r0,[r0,0]` (sin extensión de signo); 0x13f09a = `j_s.d [blink];
+# stw_s r1,[r0,0]`. Leídas en el desensamblado; ninguna corrió todavía en la cámara.
+PEEK16, POKE16 = 0x736e6, 0x13f09a
 SETMODO = 0x6e0b0  # escribe el modo de captura (palabra 0x3d97a8, sólo RAM); valores válidos 0–4
-NARGS = {PEEK32: 1, POKE32: 2, FLUSH: 2, SETMODO: 1}
+NARGS = {PEEK32: 1, POKE32: 2, FLUSH: 2, SETMODO: 1, PEEK16: 1, POKE16: 2}
+ALINEACION = {PEEK32: 4, POKE32: 4, FLUSH: 4, PEEK16: 2, POKE16: 2}
+ANCHO = {POKE32: 4, POKE16: 2}
+NO_VERIFICADAS = ('GOTO', 'GOSUB', 'RETURN', 'ELSE', 'LET')
+INT_MAX = 0x7fffffff
 ZONAS_PROHIBIDAS = ZONAS_INTOCABLES + [(0x0, 0x48000, 'vectores y pilas')]
 RAM_MAX = 0x4000000
 CLAVES = {'REM', 'LET', 'END', 'IF', 'THEN', 'ELSE', 'GOTO', 'GOSUB', 'RETURN', 'SYSTEM', 'FOREIGN',
@@ -60,6 +76,8 @@ TABLA = {}
 for e in _mapa:
     TABLA.setdefault(e['nombre'], set()).add(e['palabra_clave'])
 ENTERO = re.compile(r'-?(0|[1-9]\d*)$')
+SIN_SIGNO = re.compile(r'(0|[1-9]\d*)$')
+IF_VERIFICADO = re.compile(r'IF ([A-Za-z][A-Za-z0-9]*) == (0|[1-9]\d*) THEN ([1-9]\d*)$')
 # Forma verificada (0x10710c): `PALABRA_CLAVE [var =] Funcion(args)`. `LET x = PALABRA_CLAVE f()` NO existe:
 # el evaluador de LET (0x1993b8) sólo acepta operandos simples y cualquier error detiene la CPU (0x4b4e0).
 LLAMADA = re.compile(r'\b(SYSTEM|FOREIGN|DEBUGGING) (?:([A-Za-z][A-Za-z0-9]*) = )?([A-Za-z_]\w*)\(([^()]*)\)')
@@ -77,13 +95,16 @@ def _validar_llamada(kw, f, args, variables, err):
     if kw not in TABLA.get(f, set()):
         err(f'{f} no es de la tabla {kw} (es {sorted(TABLA.get(f, []))})')
     if f == 'Run_SpecifyFunc':
-        if len(args) != 9 or not all(ENTERO.match(a) for a in args):
-            err('Run_SpecifyFunc necesita 9 enteros literales')
+        if len(args) != 9 or not all(SIN_SIGNO.match(a) for a in args):
+            err('Run_SpecifyFunc necesita 9 enteros literales sin signo')
             return
         v = [int(a) for a in args]
+        if any(x > INT_MAX for x in v):
+            err('Run_SpecifyFunc: literal mayor que 2147483647 (para el bit 31, usar poke16 por mitades)')
+            return
         fn, nargs, outpos, dest = v[0], v[1], v[2], v[3]
         if fn not in NARGS:
-            err(f'Run_SpecifyFunc a {fn:#x}, sólo peek32/poke32/flush/modo')
+            err(f'Run_SpecifyFunc a {fn:#x}, sólo peek32/poke32/peek16/poke16/flush/modo')
             return
         if nargs != NARGS[fn] or outpos != 0:
             err(f'nargs/outpos inválidos para {fn:#x} ({nargs}, {outpos})')
@@ -95,12 +116,14 @@ def _validar_llamada(kw, f, args, variables, err):
             if not 0 <= dest <= 4:
                 err(f'modo de captura {dest} fuera de 0–4')
             return
-        if not 0 <= dest < RAM_MAX or dest % 4:
+        if not 0 <= dest < RAM_MAX or dest % ALINEACION[fn]:
             err(f'dirección {dest:#x} fuera de RAM o desalineada')
-        if fn == POKE32:
+        if fn == POKE16 and v[4] > 0xffff:
+            err(f'poke16 con valor {v[4]} fuera de 16 bits')
+        if fn in ANCHO:
             for ini, fin, motivo in ZONAS_PROHIBIDAS:
-                if ini <= dest < fin:
-                    err(f'poke32 en {dest:#x} ({motivo})')
+                if dest < fin and dest + ANCHO[fn] > ini:
+                    err(f'escritura en {dest:#x} ({motivo})')
         return
     esquema = ESQUEMAS[f]
     if len(args) != len(esquema):
@@ -120,10 +143,14 @@ def _validar_llamada(kw, f, args, variables, err):
 
 def revisar_srt(ruta):
     errores = []
+    crudo = open(ruta, 'rb').read()
     try:
-        lineas = open(ruta, 'rb').read().decode('ascii').splitlines()
+        lineas = crudo.decode('ascii').splitlines()
     except UnicodeDecodeError:
         return [f'{ruta}: contiene caracteres no ASCII']
+    if crudo.count(b'\n') != crudo.count(b'\r\n') or crudo.count(b'\r') != crudo.count(b'\r\n') \
+            or not crudo.endswith(b'\r\n'):
+        errores.append(f'{ruta}: todas las líneas deben terminar en CRLF')
     numeros, saltos, variables, cuerpos = [], [], set(), []
     # 0x10776c: las líneas numeradas se GUARDAN como programa; sólo una línea "RUN" sin número las
     # ejecuta; "QUIT" termina el archivo; cualquier otra línea sin número (salvo REM) aborta.
@@ -181,6 +208,13 @@ def revisar_srt(ruta):
             err('LOG_PRINT debe ser "LOG_PRINT VERIFY|IGNORE|0|1 <variable o número>" sin espacios en la expresión')
         if re.search(r'\bTHEN\s+(GOTO|GOSUB)\b', sin_texto):
             err('"THEN GOTO n" no existe: tras THEN va sólo el número de línea ("THEN n")')
+        if re.search(r'\b(IF|THEN)\b', sin_texto):
+            mi = IF_VERIFICADO.match(sin_texto)
+            if not mi or int(mi.group(2)) > INT_MAX:
+                err('IF debe ser exactamente "IF var == ENTERO_SIN_SIGNO THEN línea" (un literal negativo detiene la CPU)')
+        for palabra in NO_VERIFICADAS:
+            if re.search(rf'\b{palabra}\b', sin_texto):
+                err(f'{palabra} no está verificado en la cámara: usar sólo "IF var == N THEN línea" y END')
         resto = LLAMADA.sub(' ', sin_texto)
         resto = re.sub(r'^LOG_PRINT (VERIFY|IGNORE)', 'LOG_PRINT', resto)
         for ident in re.findall(r'[A-Za-z_]\w*', resto):
@@ -216,6 +250,10 @@ def main():
     errores = []
     lista = os.path.join(carpeta, 'BatchScripts.txt')
     nombres = open(lista).read().split() if os.path.exists(lista) else []
+    if nombres:
+        b = open(lista, 'rb').read()
+        if b.count(b'\n') != b.count(b'\r\n') or not b.endswith(b'\r\n'):
+            errores.append('BatchScripts.txt: todas las líneas deben terminar en CRLF')
     if not nombres:
         errores.append('BatchScripts.txt falta o está vacío')
     for nombre in nombres:
