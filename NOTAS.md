@@ -1075,3 +1075,16 @@ M4L sin nada por encima de un cuarto de escala se tomaría por comprimida: para 
 `tools/e2e_raw.py` lo comprueba con 1994, 1995, 1996 y 2001 (mosaico idéntico al archivo, correlación 0,993
 y pendiente 1,13–1,17 contra el JPG de la cámara) y con 1981 y 1982 de P9. `tools/e2e_scripts.py`: 32 casos
 (entran M4R y M4N).
+
+## 2026-11-12 — Revisión con ruido en modo 4: orientación y guardado del RAW descartados
+
+- **M4L horizontal y vertical** (`dump/raw15`, 2002–2005; log `8, 30757, 3, 28712, 4`): la revisión sale
+  igual de roja/verde y con ruido en las dos posiciones. La orientación no es la causa.
+- **M4N** = M4R sin SaveCFAonTake (`dump/raw16`, 2006–2009; log `30757, 28712, 4`): sólo JPG, sin RAW,
+  JPG correctos. La revisión sale **igual de mal**, pero bastante más rápido. Guardar el RAW tampoco es la causa.
+- Conclusión: la revisión se rompe con cualquier modo de captura ≠ 0 (P9, M3F2/M3V, M4L/M4R/M4N), aunque
+  la salida del IRP (JPG y sus miniaturas) esté bien. En modo 0 (P8) está bien. Sigue en pie el
+  candidato `ctx+8 = raw + N·ancho·alto` con N=2 en modo ≠ 0. Sin M4Q todavía.
+- Aparte: con cualquier kit de scripts **todas** las fotos salen en vertical (3216×4288, etiqueta 1),
+  también las tomadas en horizontal, en el JPG y en la revisión; las de fábrica salen horizontales
+  (499 de 4288×3216 y 155 de 3216×4288 en `dump/sd_original`). En análisis aparte.
