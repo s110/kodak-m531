@@ -8,7 +8,7 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 | 0 | Nada: lectura de la RAM por USB | — | — |
 | 1 | Archivos en la SD (HiddenMenu, banderas, scripts) | Borrar los archivos o sacar la SD | Segura por diseño |
 | 2 | RAM en caliente con scripts (`Run_SpecifyFunc` + `poke32`) | Apagar y **sacar la batería** unos segundos | Segura; ver riesgos abajo |
-| 3 | Firmware principal flasheado (`SYSTEM\KM531.FW`) | Reflashear el stock reconstruido | **Pendiente**: requiere los volcados de la NAND Tool |
+| 3 | Firmware principal flasheado (`SYSTEM\KM531.FW`) | Reflashear el stock reconstruido; si no arranca, boot desde `TBM_HD14P.BIN` | **Pendiente**: requiere los volcados de la NAND Tool y probar la vía del boot en la cámara |
 | 4 | Calibración, parámetros, boot, particiones | Restaurar desde volcado | **Prohibido**: no se toca |
 
 ## Nivel 1: archivos en la SD
@@ -57,6 +57,7 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
      limita al de la partición 6 (`0x6584c(6, …)`). Mismo esquema que la C713. Y además:
    - tiene una vía de recuperación si el main no arranca (actualizar desde SD al encender o
      combinación de teclas). Si no la tiene, el nivel 3 queda **descartado**.
+     **Leído en el código del boot (2026-11-12): la tiene.** Ver "Vía de recuperación del boot".
 4. Los parches no tocan: la rutina de actualización (`0x2bcdb8–0x2bd800`), el menú oculto ni
    su opción UPDATE FIRMWARE, la NAND Tool. Así, si el firmware modificado arranca, siempre
    puede reflashear el stock por el mismo camino.
@@ -87,6 +88,9 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 - **Opciones "Dump" de la NAND Tool**: su inocuidad sale de los nombres. Antes de usarlas,
   fotografiar el menú en la cámara y compararlo con la lista; revisar en el código que cada
   manejador de Dump sólo lea la NAND y escriba un archivo.
+  **Revisado el 2026-11-12:** los nueve manejadores leen y escriben un archivo en `B:`; ninguno
+  llega a las cinco funciones que programan o borran la NAND (NOTAS.md, "NAND Tool: manejadores de
+  Dump"). Sigue pendiente comparar el menú en pantalla con la lista.
 - **Ensayo del actualizador** antes del primer flasheo real: lanzar UPDATE FIRMWARE con un `.FW`
   con sum32 mal hecha a propósito y confirmar el rechazo ("Firmware file is invalid"). Verificado en
   código que el validador corre antes de escribir en `0x2bd5bc`; falta revisar el resto de la ruta.
@@ -104,3 +108,67 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 
 NAND Tool: sólo las opciones "Dump". Prohibidas: A2/A3, B1/B2, C2, D2, E2, F2, H1/H2, I1–I3, I6,
 J1, K1, L1, M1/M3. Archivos `ALLOW_ERASE_BOOT` y `ALLOW_ROLLBACK_OLD_PARTITION`: jamás en la SD.
+
+## Vía de recuperación del boot (2026-11-12) — qué está probado y qué falta
+
+El cargador de arranque está entero en la RAM (`0x800000–0x82cff0`) y su sum32 coincide con la que
+guarda la tabla de particiones (`0xbbb66ba4`). Detalle y direcciones en NOTAS.md, "Cargador de
+arranque leído desde la RAM"; decompilación en `docs/decomp_boot.c`.
+
+**Probado en el código del boot**
+- Con una partición 6 mala arranca solo desde archivo. "Mala" = sin `RHIR`, con otra palabra de
+  modelo, con error de lectura, o con la sum32 de un registro tipo 1 (código, datos, `rec3`)
+  distinta de la de la cabecera. Entonces carga `A:\TBM_HD14P.BIN` (memoria interna) y, si falla,
+  `B:\TBM_HD14P.BIN` (SD). El archivo tiene el formato RHIR de `KM531.FW`; el boot lo lee a RAM,
+  verifica las mismas sumas y lo ejecuta. Esa ruta no escribe la NAND.
+- Con **DELETE** apretada al encender prueba `B:\TBM_HD14P.BIN` antes que la NAND. Es la salida
+  para una partición 6 con sumas correctas y código que no funciona (el caso de un parche propio
+  malo), que el boot sí arranca.
+- No hay modo de recuperación por USB en el boot: sólo NAND, memoria interna y SD.
+- Si nada arranca, los LED parpadean el código de error sin fin (11 magia, 13 suma, 14 modelo,
+  7 lectura, 8–10 archivo).
+- Una actualización cortada a mitad (`0x2bd5bc` escribe la partición 6 en sitio) deja sumas malas:
+  cae en el primer caso.
+
+**Inferido, sin probar**
+- Que la tecla del bit 12 sea DELETE: sale de la tabla de teclas del firmware principal
+  (`0x3ea620`), que usa el mismo periférico y los mismos registros que el boot.
+- Que el firmware principal cargado desde archivo sea usable para reflashear: lee del bloque `INFO`
+  que arrancó desde archivo y pasa la ruta del TBM a su lector de recursos; no se siguió más.
+  Con la partición 6 dañada, gráficos e idiomas (registros tipo 0) saldrían del archivo.
+- Que el boot de la partición 0 sea el mismo que quedó en la RAM: lo dice la suma; lo confirma
+  `C1 BootCode.dmp`.
+
+**Lo que NO cubre**
+- Daño en la partición 0 (boot), en la tabla de particiones o en lo que arranca al boot: no hay
+  vuelta atrás sin programador externo. Nada de eso se escribe en el nivel 3 mientras el `.FW`
+  empiece por `RHIR` y no lleve el marcador `INFO`+`0x55aaaa55` (reglas ya vigentes).
+- `0x2bcf28` (actualizador del boot, `TBIB_HD14P.BIN`) no verifica ninguna suma del boot antes de
+  escribir la partición 0: sigue prohibido.
+
+**Qué hay que confirmar con los volcados antes de cualquier flasheo**
+1. `BootCode.dmp`: cabecera `0x800000, 0x2cff0, 0xbbb66ba4, 0x800030`, sum32 del cuerpo
+   `0xbbb66ba4` y bytes iguales a `firmware/stock/boot_hdr16_0x800000.bin` (el boot analizado es
+   el instalado).
+2. `MainCode.dmp`: cabecera igual a la de la RAM, sumas de todos los registros, y código, gráficos
+   y `rec3` idénticos a los reconstruidos. De ahí sale el `KM531.FW` de fábrica completo (con la
+   sección de datos y los idiomas originales, que hoy no existen fuera de la cámara).
+3. `NANDPartition.txt`: `uwSize_HexMain 0x01F4` → partición 6 = `0x7d0000` B (valor de
+   `km531fw.py patch --particion`), y los demás tamaños iguales a la tabla de la RAM.
+4. `NANDP1.dmp` con `P1IDSTR`; `Calibration*.dmp`, `CameraParam*.dmp`, `NANDReserved.dmp`,
+   `BFNSetting.txt` y `BootNANDBase.dmp` guardados en dos copias con SHA-256 (no hay con qué
+   compararlos: son el único respaldo de lo que es propio de esta unidad).
+   Todo eso lo comprueba `tools/verificar_volcados.py`; el kit está en `sd_kit/nand_dump/`.
+
+**Qué hay que probar en la cámara antes del primer flasheo (ninguna prueba escribe la NAND)**
+5. La vía del boot, con el firmware de fábrica intacto: `KM531.FW` de fábrica (de `MainCode.dmp`)
+   copiado como `TBM_HD14P.BIN` en la raíz de la SD, encender con DELETE apretada, y comprobar que
+   arrancó desde el archivo (byte `0x928` = `0x20`; con arranque normal vale `0x10`). Cómo leerlo
+   está por resolver: la RAM por USB sólo se vio sin SD, y un script de lectura pide `Batch/`. Esta prueba pide levantar para ese archivo la regla "ningún `TBM_*.BIN` en la SD", que
+   existe porque la NAND Tool (B1, I3) y los comandos `UpdateFW`/`NANDScriptEx` lo usan para
+   escribir. Condiciones: SD sin `Batch/`, sin `ENABLE_NAND_TOOL`, sin entrar al menú oculto, y
+   borrar el archivo al terminar. Es una decisión aparte; no está hecha ni preparada.
+6. El ensayo del actualizador con un `.FW` de suma mala (rechazo sin escribir), ya listado arriba.
+7. Primer flasheo = fábrica idéntico, con el `TBM_HD14P.BIN` de fábrica guardado en el Mac para
+   copiarlo a una SD si hiciera falta.
+

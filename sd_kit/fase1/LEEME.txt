@@ -11,6 +11,10 @@ Copiar TODO el contenido de esta carpeta a la RAÍZ de la SD de la Kodak (no den
   Batch/P8.srt             RAW de 8 bits comprimidos + JPG normal (modo 0)
   Batch/P9.srt             RAW de 10 bits efectivos (modo 4); el JPG de la cámara sale rosado
   Batch/P6.srt             modo 3 (12 bits): rompe el JPG y cuelga en la segunda foto. No listar.
+  Batch/M3F2.srt           EXPERIMENTAL, sin probar, no listado: modo 3 con el IRP en el formato del
+                           modo 4 (dos bytes de tabla en RAM, con guardia). RAW de 16 bits con 12
+                           lineales; el JPG sale como ruido. Probar sólo después de EE0 (fase 3),
+                           solo en BatchScripts.txt. Ver ../PASOS.md, paso 6, y NOTAS.md.
 
 Copiar con: cp -X (sin metadatos de macOS) y luego dot_clean en la SD.
 

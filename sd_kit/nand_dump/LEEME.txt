@@ -1,0 +1,78 @@
+Kit de volcados de la NAND Tool (Kodak M531). Sólo opciones "Dump": nada se escribe en la NAND.
+PREPARADO, SIN COPIAR A LA SD. Nivel 1 de ../../REVERSIBILIDAD.md.
+
+Qué hay en sd/ (es TODO lo que va a la raíz de la SD para esta sesión):
+  HiddenMenu/              carpeta que habilita el menú oculto
+  ENABLE_NAND_TOOL         archivo vacío: muestra NAND TOOL dentro del menú oculto
+  DISABLE_AUTO_POWER_OFF   archivo vacío: evita el apagado automático durante los volcados
+No hay carpeta Batch: en esta sesión no corre ningún script.
+
+Qué NO va nunca a esa SD (el verificador lo marca como error si aparece):
+  ALLOW_ERASE_BOOT, ALLOW_ROLLBACK_OLD_PARTITION, TBIB_*.BIN, TBM_*.BIN, KM531.FW, IMAGE.ISO,
+  NANDUtility.txt, BootNANDBase.bin.
+La NAND Tool no necesita ningún archivo de entrada para volcar: los textos "Need Files" de la
+RAM (0x4842c9, 0x48436b) pertenecen a I3 y a I6/K1, que no se usan.
+
+QUÉ ESTÁ DEMOSTRADO Y QUÉ NO
+  Demostrado en el código (NOTAS.md, "NAND Tool: manejadores de Dump"):
+    - los textos exactos de las 29 opciones (RAM 0x483ef9…) y los nombres de los archivos;
+    - qué hace cada opción Dump: lee una partición a un búfer y escribe B:\<archivo>
+      (A1 → particiones 1 y 2, B3 → 6, C1 → 0, E1 → 3 y 4, F1 → 5; D1 e I4 escriben texto;
+      G1 e I5 leen zonas propias). A1 y E1 escriben DOS archivos cada una.
+    - sólo cinco funciones del firmware programan o borran la NAND (0x131ad0, 0x131b58,
+      0x131bb4, 0x131c0c, 0x1d1540). Siguiendo las llamadas directas, las lecturas de D1, G1,
+      I4 e I5 no llegan a ninguna (cierre completo) y la de A1/B3/C1/E1/F1 tampoco en 16
+      niveles. No se siguieron saltos de cola ni llamadas por puntero.
+  NO determinado con el material disponible (hay que mirarlo en la cámara):
+    - cómo se ve el menú en pantalla, con qué teclas se elige y ejecuta una opción y si pide
+      confirmación. Antes de ejecutar nada: fotografiar la pantalla y comparar con la lista.
+    - el largo de cada archivo (partición entera o sólo lo ocupado) y cuánto tarda cada volcado.
+    - si ENABLE_NAND_TOOL se lee sólo al encender: el código lo consulta en el arranque (literal
+      en 0x1fe324), así que debe estar en la SD antes de encender.
+
+PASOS
+  0. En el Mac. Batería de la cámara cargada. SD con al menos 32 MB libres (los volcados suman
+     unos 12 MB). Si la SD tiene Batch/ de sesiones anteriores, moverla al Mac: sin scripts.
+     Claude copia sd/* a la raíz con cp -X, corre dot_clean y compara hashes.
+  1. Cámara fuera del USB. Poner la SD y encender.
+  2. Menu → Setup → Format. En la pantalla de confirmación (sin confirmar: OK formatea la
+     tarjeta) mantener DELETE y pulsar DERECHA. Abre "HIDDEN MENU".
+  3. FIRMWARE VERSION: foto con el celular (BOOT, MAIN, CamOS, IQLib, BFN).
+  4. NAND TOOL ("NAND Tool Menu (Engineering Mode)"): foto de CADA pantalla del menú antes de
+     tocar nada. Comparar con la lista de abajo. Si el orden o los textos difieren, NO seguir:
+     salir (EXIT) y traer las fotos.
+  5. Ejecutar, de a una y esperando el resultado de cada una, SÓLO estas nueve:
+       A1.Dump to:Calibration.dmp        → Calibration.dmp y Calibration_2.dmp
+       B3.Dump to:MainCode.dmp           → MainCode.dmp (la más larga: hasta 7,8 MB)
+       C1.Dump to:BootCode.dmp           → BootCode.dmp
+       D1.Dump to:NANDPartition.txt      → NANDPartition.txt
+       E1.Dump to:CameraParam.dmp        → CameraParam.dmp y CameraParam_2.dmp
+       F1.Dump to:NANDReserved.dmp       → NANDReserved.dmp
+       G1.Dump to:NANDP1.dmp             → NANDP1.dmp
+       I4.Dump to:BFNSetting.txt         → BFNSetting.txt
+       I5.Dump to:BootNANDBase.dmp       → BootNANDBase.dmp
+     Tras cada una la herramienta tiene los textos " Result:Success(O)!" y
+     " Result:Fail(X),ErrCode=0x%x": anotar o fotografiar lo que muestre.
+     Si aparece "Battery level is too low!": parar, cargar la batería y repetir.
+  6. EXIT. Apagar la cámara con su botón. Sacar la SD y traerla al Mac.
+  7. En el Mac: Claude copia los 11 archivos a dump/nand_tool/ y a una segunda carpeta, y corre
+       python3 -I tools/verificar_volcados.py dump/nand_tool --copia <segunda> --escribir-sumas \
+               --json dump/nand_tool/verificacion.json
+     Con 0 errores, MainCode.dmp y BootCode.dmp quedan como respaldo de fábrica y de ahí sale
+     el KM531.FW de fábrica (primeros "fin_datos" bytes de MainCode.dmp).
+
+OPCIONES QUE NO SE TOCAN (escriben, borran o formatean). Varias están pegadas a una de volcado:
+  A2 Restore, A3 Erase Calibration      (junto a A1)
+  B1 Update Main Code, B2 Erase Main    (junto a B3)
+  C2 Update Boot Code                   (junto a C1)
+  D2 Change Partition                   (junto a D1)
+  E2 Reset Camera Parameter             (junto a E1)
+  F2 Erase NAND Reserved Area           (junto a F1)
+  H1 Full Format Card, H2 Full Format Internal
+  I1, I2, I3 (5in1), I6                 (junto a I4 e I5)
+  J1 Erase NAND Start Sector 0, K1, L1, M1, M3
+  M2 Dump Face Registry no hace falta.
+El despachador (0x24cb44) tiene además una entrada sin texto en la lista (id 0x20) que borra la
+partición 0 si existe B:\ALLOW_ERASE_BOOT: otra razón para que ese archivo no exista nunca.
+
+PARA DESHACER: borrar de la SD HiddenMenu/, ENABLE_NAND_TOOL y DISABLE_AUTO_POWER_OFF.

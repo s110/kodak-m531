@@ -18,6 +18,8 @@ Antes de empezar: batería cargada. Cámara fuera del USB salvo donde se indique
      128 KB (ver NOTAS.md) y no la falta de soporte: los logs de `Batch/` lo dirán.
 
 ## Paso 2 — Menú oculto y volcados de la NAND Tool (sólo opciones "Dump")
+Kit, pasos detallados y lista de control: `nand_dump/LEEME.txt` y `nand_dump/LISTA.md` (sesión sin
+scripts: sin `Batch/`). A1 y E1 escriben dos archivos cada una: en total vuelven 11 archivos.
 1. Con la carpeta `HiddenMenu` en la SD: Menu → Setup → Format → en la pantalla de confirmación
    (sin confirmar), **mantener DELETE y pulsar DERECHA**. Debe abrir "HIDDEN MENU".
 2. FIRMWARE VERSION: anota BOOT, MAIN, CamOS, IQLib, BFN (o foto con el celular).
@@ -25,8 +27,9 @@ Antes de empezar: batería cargada. Cámara fuera del USB salvo donde se indique
    A1 Calibration.dmp · B3 MainCode.dmp · C1 BootCode.dmp · D1 NANDPartition.txt ·
    E1 CameraParam.dmp · F1 NANDReserved.dmp · G1 NANDP1.dmp · I4 BFNSetting.txt · I5 BootNANDBase.dmp
 4. **No toques ninguna otra opción** (borran o reescriben la NAND).
-5. Apaga, saca la SD y tráela al Mac. Claude guarda los volcados con hash en dos lugares y
-   reconstruye el `KM531.FW` de fábrica (`tools/km531fw.py info` debe dar "el firmware lo acepta").
+5. Apaga, saca la SD y tráela al Mac. Claude guarda los volcados con hash en dos lugares, corre
+   `tools/verificar_volcados.py` (0 errores) y reconstruye el `KM531.FW` de fábrica
+   (`tools/km531fw.py info` debe dar "el firmware lo acepta").
 
 ## Paso 3 — Primera foto RAW
 1. Con el kit en la SD, enciende (P4 deja activo el RAW hasta apagar).
@@ -50,6 +53,15 @@ Antes de empezar: batería cargada. Cámara fuera del USB salvo donde se indique
 3. `Batch/EE0.LOG` debe decir `VERIFY: 4473808` y luego `VERIFY: 4472856`.
 4. Si la cámara se congela al encender: sacar batería y SD, quitar EE0 de `BatchScripts.txt`.
    EE0 es el primer script con `IF` y con `poke32` que corre en la cámara.
+
+## Paso 6 — Modo 3 sin cuelgue (experimental, después de que EE0 funcione)
+1. `fase1/Batch/M3F2.srt` no está en ningún `BatchScripts.txt`. Para probarlo: `BatchScripts.txt`
+   con una sola línea `M3F2`, más `M3F2.srt`; verificador sobre la carpeta y sobre la copia en la SD.
+2. Encender, tomar tres fotos seguidas esperando a que termine de guardar cada una.
+3. Esperado: `101O####.RAW` de 28.200.960 B en cada foto, JPG y revisión con ruido, sin cuelgue.
+   `Batch/M3F2.LOG`: `252054531`, `235211523`, `151391235`, `134548227`, `3`.
+4. Si sólo aparecen una o dos líneas, la guardia no dejó escribir (firmware distinto). Si la cámara
+   se congela: batería y SD fuera; traer la SD con lo que haya quedado. Detalle en NOTAS.md.
 
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los

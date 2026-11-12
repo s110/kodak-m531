@@ -461,3 +461,196 @@ Secciones anteriores que quedan superadas (no se reescriben para conservar el hi
   (0 contra 0x08000000); ningún script la toca.
 - SD: copiados `BatchScripts.txt` (P8, EE0), `P8.srt` y `EE0.srt`. Los .LOG anteriores quedaron en
   `dump/raw7/` (no había fotos nuevas después de la 1982).
+
+## Modo 3 (RAW de 16 bits): JPG roto y cuelgue en la segunda foto — análisis estático (2026-11-12)
+
+Evidencia: `docs/decomp_modo3.c` (Ghidra, sin editar), `work/code_full.s`, la tabla de pools de la
+RAM y los archivos de `dump/raw1`. Sin cámara: lo que sigue separa lo leído de lo supuesto.
+
+**Demostrado en el código**
+- El validador del HWIRP `0x2b0160` calcula los bytes por línea según el formato (`ctx+0x2c`):
+  0 → ancho; 1 → ancho·10/8; 2 → ancho·12/8; 5 y 6 → ancho·2; y exige ≤ `0x1ffc`. Con 4320 px los
+  formatos 5 y 6 dan 8640 y devuelve `0x03300003`. Los formatos 3 y 4 saltan esa comprobación
+  (rama `default`); nada los usa.
+- El modo de captura se traduce a formato del IRP en dos tablas de saltos de un byte por modo:
+  `0x128344` (bytes `03 0c 06 0f 09`, montaje de la foto, `0x127ff4`) y `0x1286dc` (bytes
+  `03 0b 05 0e 08`, función `0x12853c`). Modo 0 → 0, 1 → 5, 2 → 1, 3 → 6, 4 → 2. Son el único uso
+  del modo dentro de la configuración del IRP.
+- El error nace en el primer paso de la tarea JPEG (`0x155b3c` → `0x12989c` → cuerpo `0x1c3410` →
+  `0x1bc528`/`0x1bc5a8`) y el cuerpo sale por `0x1c6326` sin pasar por `0x129ba0` ni `0x129be0`.
+  Esas dos funciones son las únicas halladas que llaman al gancho de vista rápida (`0xf0d14`,
+  puntero en `0x3dbdb4`), y de ese gancho cuelgan los tres llamadores de `0x12bc04`, que es quien devuelve la
+  ranura del RAW a la cola libre, activa el evento `0x10` del grupo `0x40100004` y desarma la cola.
+  Con el IRP rechazado, esa liberación no ocurre por esta vía.
+- La tarea termina en `0x15714c`, que escribe el "JPG" de 224 B (`FF D9` + texto de `0x3dc694`).
+  Los dos archivos de `dump/raw1` (1968 y 1969) son idénticos: `IRPTask[3300003] JPEGTask[0]`.
+- Primera y segunda falla no recorren lo mismo. La tubería (`0x3dbd98`) arranca en estado 0; en la
+  primera falla `0x129a1c` acepta el estado 0, corre la parada, borra el contexto del gancho
+  (`+0x18`), suelta el reloj (`0x1bc2ac` → `0xfa338(6)`) y deja el estado en 4. En la segunda,
+  `0x12989c` vuelve a tomar el reloj (`0x1bc294` → `0xfa21c(6)`) y a armar el gancho, falla, y
+  `0x129a1c` encuentra el estado 4: devuelve `0x04800101` sin parar nada, sin borrar `+0x18` y sin
+  soltar el reloj. `0xfa21c`/`0xfa338` son contadores de referencia de reloj, no cerrojos.
+- En la ruta directa del HWIRP (`0x2b0948`) la validación corre después de tomar el reloj
+  (`0xfa21c(4)`), fijar pines y habilitar la interrupción `0x603`; al fallar sólo se llama a
+  `0x2b0930` (bandera + evento `0x100`). No se encontró ningún lector de la bandera `0x3e506c`.
+- **Memoria del RAW.** Tabla de pools en `0x3e7c40` (gestor `0x4964dc`, entradas de 0x18 B). El
+  pool 8 mide `0x1ae5000` = 28.200.960 B (`0x213e000–0x3c23000`): exactamente un RAW de 16 bits.
+  `0x12aba4` lo parte en ranuras de `ceil1024(ancho·alto)` = 14.100.480 B **sin mirar el modo**: dos
+  ranuras, en `0x213e000` y `0x2eb0800`, que salen de una cola FIFO (`0x294594`/`0x2945e8`). La
+  cola se arma en cada disparo si estaba desarmada (`0xf08b4`) y `0x12bc04` → `0x12ac94` la
+  desarma cuando no queda nada pendiente, así que un disparo aislado cae siempre en la ranura 0.
+  Un RAW de modo 3 (28,2 MB) o de modo 4 (21,15 MB) escrito en la ranura 1 pasaría el final del
+  pool y el de la SDRAM (`0x4995800` y `0x42dc400` contra `0x4000000`).
+- `Take12BitCCDRaw` del menú DEBUG hace lo mismo que el script: `0x1f289c` invierte SaveCFAonTake
+  y pone el modo 3 o 0. No hay otra preparación de fábrica para el modo 3.
+
+**Demostrado con los archivos**
+- `101O1969.RAW` (segunda foto) es una imagen completa y coherente hasta la última fila. Las filas
+  2100 en adelante habrían quedado fuera de la SDRAM si esa captura hubiese ido a la ranura 1: la
+  segunda captura **no** desbordó. El cuelgue llegó después de escribir el segundo RAW y el segundo
+  "JPG" de 224 B.
+
+**Sin determinar**
+- La instrucción donde se cuelga. Lo leído deja dos sospechas, ninguna probada: (a) el estado que
+  la segunda falla deja sin limpiar (gancho armado con contexto viejo, parada omitida); (b) las
+  esperas sin tiempo límite sobre el evento `0x10` (`0x12ae6c`) y sobre la cola de trabajos
+  (`0x76664`, bucles en `0x12bc64` y `0x1ea5ba`), que dependen de una liberación que no llega.
+- Por qué la segunda captura volvió a la ranura 0 si la primera no se liberó por `0x12bc04`: hay
+  otro desarme (`0x12bc64` → `0x12ad2c`, llamado desde la interfaz) que no se siguió.
+
+**Arreglo propuesto, sólo RAM: `sd_kit/fase1/Batch/M3F2.srt` (experimental, fuera de BatchScripts.txt)**
+- Cambia el byte del modo 3 en las dos tablas para que el IRP use el formato 2, el mismo del modo 4
+  (6480 B por línea, pasa el validador): palabra `0x128344` de `0x0f060c03` a `0x09060c03` y palabra
+  `0x1286dc` de `0x0e050b03` a `0x08050b03`. Luego SaveCFAonTake(1) y modo 3. Con guardia: si una
+  palabra no es la de fábrica, anota la lectura y termina.
+- Son bytes de tablas dentro de la sección de código que se leen como datos (`ldb.x`), igual que el
+  literal de EE0: no hace falta vaciar caché. Coinciden en `rec0_code_0x48000.bin` y en la RAM.
+- Efecto esperado: el sensor sigue entregando 16 bits y el RAW sale de 28.200.960 B con 12 bits
+  lineales. El IRP lee ese búfer como 12 bits empaquetados (usa 21,15 MB de los 28,2), así que el
+  JPG y la revisión salen como ruido, pero la tarea JPEG recorre el mismo camino que en el modo 4,
+  que en la cámara no se cuelga: el gancho corre y la ranura se libera.
+- Lo que no garantiza: que el cuelgue desaparezca (la causa exacta no está probada) ni el tamaño
+  del JPG de ruido. Si la cámara se congela: batería y SD fuera; nada queda escrito.
+- Un cambio del límite `0x1ffc` no es seguro: es el tope de la línea de entrada del ASIC, y el
+  comparador es un inmediato de instrucción (`0x2b028a`), no un literal.
+- Precaución para P9 (modo 4) y M3F2: esperar a que termine de guardar antes de disparar otra vez.
+  Una captura con la anterior todavía en proceso tomaría la ranura 1.
+- Orden de prueba: EE0 primero (estrena `IF` y `poke32`); después M3F2 solo en `BatchScripts.txt`,
+  tres fotos seguidas esperando el guardado, y leer `M3F2.LOG` (esperado: `252054531`, `235211523`,
+  `151391235`, `134548227`, `3`).
+
+## Cargador de arranque leído desde la RAM (2026-11-12)
+
+- **El boot está entero en la RAM**: `0x800000–0x82cff0`, con su cabecera de 16 B justo antes
+  (`0x7ffff0`: carga `0x800000`, tamaño `0x2cff0`, sum32 `0xbbb66ba4`, entrada `0x800030`). La
+  sum32 de esos `0x2cff0` B en `dump/ram_snapshot.bin` da `0xbbb66ba4`, la misma que guarda la tabla
+  de particiones (`0x4da228 + 0xb4`). Copia en `firmware/stock/boot_hdr16_0x800000.bin` (con hash;
+  SHA-256 del cuerpo `feedac93…2129e`). Datos inicializados en `0x850000…` con valores de la última
+  ejecución. Decompilación: `docs/decomp_boot.c`; proyecto Ghidra `boot_ram_0x800000.bin`.
+- Es una aplicación MQX con FAT: tareas `BootTask` (`0x800df8`), `MCUCTRL_Task`, `RTOSINIT`;
+  dispositivos `DEVNAND:`, `PMNAND:`, `DEVSD:`, `PMSD:`. No tiene cadenas ni descriptores de USB de
+  almacenamiento o descarga; la rama con USB (`0x801224`) es la carga de la batería.
+- **Arranque desde la NAND** (`0x800f58`): lee el sector 0 de la partición 6 (`0x807890`, mismos
+  campos `+0xd0`/`+0xde` de la tabla que usa el firmware), exige `RHIR` (error `0xb`) y palabra de
+  modelo `0x01121410` (error `0xe`), y recorre los registros: los de tipo 1 se leen a su dirección
+  de RAM y se comprueba su sum32 con la función de `0x800000` (error `0xd`; lectura fallida `7`); el
+  de tipo 2 sólo guarda su sector y cuenta en `0x850400` (hoy `0x0004b440`: sector 46144, 4
+  sectores); los de tipo 0 no se leen. No mira `KHIR` ni el tamaño total.
+- **Vía de recuperación** (`0x800df8`): si el arranque desde la NAND falla, carga
+  `A:\TBM_HD14P.BIN` (`0x801100`) y, si también falla, hay SD y el byte `0x850405` vale 1,
+  `B:\TBM_HD14P.BIN`. El archivo tiene el formato RHIR de `KM531.FW`: cabecera de 16 B, registros a
+  continuación, cada tipo 1 se lee del archivo a RAM y se verifica con sum32 (`0x801060`). Esta
+  ruta sólo lee: no escribe la NAND.
+- **Arranque forzado desde la SD**: al inicio (`0x8002e6`) el boot lee el estado de teclas
+  (`0x803108`, registros `0x0fe70224`/`0x0fe70228`); con el bit 12 en 0 pone `0x850404 = 1` y
+  `0x850405 = 0`, y entonces `BootTask` prueba `B:\TBM_HD14P.BIN` **antes** que la NAND. En el
+  firmware principal ese mismo bit es la tecla de identificador `0xF` (tabla `0x3ea620`, entrada
+  17: máscara `0x1000`), que es **DELETE** (la del menú oculto). En reposo el estado es
+  `0x01ffffff` (teclas activas en 0) y `0x850404` vale 0: el último arranque fue normal.
+- Si todo falla, `0x8003cc` parpadea los tres LED tantas veces como el código de error, sin fin
+  (7 lectura, 8 unidad, 9 archivo, 10 lectura corta, 11 magia, 13 suma, 14 modelo).
+- El boot deja en `0x900` el bloque `INFO` (`+0x24 = 0x55aaaa55`, `+0x28` = origen: `0x10` NAND,
+  `0x20` archivo). Hoy vale `0x10`. El firmware principal lo lee en `0x7c1da`: con `0x20` pasa la
+  ruta de `B:\TBM_HD14P.BIN` (`0x4c1c8`) a `0x17151c` antes de cada lectura con `0x171524`
+  (`0x7c1f4`, `0x137e92`, `0x1380cc`, `0x234554`). Por el patrón, es el origen de los recursos
+  (gráficos e idiomas, registros tipo 0) cuando se arrancó desde archivo; es una inferencia: esas
+  dos funciones no se leyeron. Los demás usos de la ruta están en la NAND Tool y en los scripts.
+- **Tabla de particiones** (`0x4da228`, empieza por `P1IDSTR`; bloques de 32 sectores = 16 KiB):
+  P0 boot 695–710 (0x3c000 B), P1 calibración 0–10, P2 calibración (copia) 10–20, P3 parámetros
+  20, P4 parámetros (copia) 21, P5 reserva 22–195 (0x2b4000 B), P6 código principal 195–695
+  (0x7d0000 B). El boot ocupa 12 bloques (`+0xac`).
+- **Actualizadores del firmware principal** (`work/decomp_upd.c`):
+  `0x2bd5bc` (partición 6) valida con `0x2bd46c` antes de escribir, escribe, relee y compara,
+  hasta 3 veces; escribe en sitio, sin copia.
+  `0x2bcf28` (boot, `B:\TBIB_HD14P.BIN`) → `0x2bd664` sólo exige tamaño ≤ partición 0 y, según un
+  parámetro, la palabra de modelo en los últimos 16 B; no verifica ninguna suma del boot antes de
+  escribir. Escribe la partición 0 y actualiza la cabecera del boot en la tabla (`0x1445d0` caso 0).
+  `0x2bd024` (5-en-1): primera palabra = XOR del resto (`0x2bd58c`), dos bloques (principal y
+  boot); busca `INFO`+`0x55aaaa55` en el bloque del boot y entonces escribe la partición 0 y luego
+  la 6.
+- **Qué pasa con una partición 6 mala**: cabecera, modelo, lectura o suma de un registro tipo 1
+  incorrectos → el boot no la arranca y pasa a los archivos TBM. Una partición 6 con sumas
+  correctas y código que no funciona **sí** arranca: para ese caso está DELETE al encender.
+- La C713 de referencia (`ref/ModernShare/docs/research-notes.md`) sólo dice que el boot no forma
+  parte de la actualización y que por eso una imagen mala "hasta ahora siempre fue recuperable";
+  no describe el mecanismo. Lo de arriba sale del boot de la M531, no de la C713.
+
+## NAND Tool: manejadores de Dump (2026-11-12)
+
+- Despachador en `0x24cb26`: tabla de saltos de 16 bits en `0x24cb44`, 32 entradas (identificadores
+  `0x19–0x38`). Volcados: `0x19` → `0x2c0510(1)` y `0x2c0510(2)` (A1); `0x1e` → `0x2c0510(6)` (B3);
+  `0x21` → `0x2c0510(0)` (C1); `0x23` → `0x2c0738` (D1); `0x24` → `0x2c0510(3)` y `(4)` (E1);
+  `0x26` → `0x2c0510(5)` (F1); `0x28` → `0x2c0620` (G1); `0x34` → `0x2c09e4` (I4); `0x36` →
+  `0x2c1908` (I5).
+- `0x2c0510(partición)`: arma `B:\` + nombre (bloque de cadenas en `0x3534b8`: 0 `BootCode.dmp`,
+  1 `Calibration.dmp`, 2 `Calibration_2.dmp`, 3 `CameraParam.dmp`, 4 `CameraParam_2.dmp`,
+  5 `NANDReserved.dmp`, 6 `MainCode.dmp`), pide el búfer del pool `0x20`, comprueba que la partición
+  quepa, lo llena de `0xFF`, lee con `0x1436fc` y escribe el archivo con `0x2c06b0`. **A1 y E1
+  escriben dos archivos cada una.**
+- D1 escribe diez líneas `"%-40s0x%04X\r\n"`: `uwReg_Configuration`, `uwReg_AutoRefresh`,
+  `uwReg_Control`, `uwSize_BootCode`, `uwSize_Calibration`, `uwSize_CameraPara`, `uwSize_Reserved`,
+  `uwSize_HexMain`, `uwProductID`, `uwPartition_Ver`. Con la tabla de la RAM: `0, 0, 0, 0xF, 0xA,
+  0x1, 0xAD, 0x1F4, 0x1224, 0x10`.
+- **Quién puede escribir la NAND.** Todas las órdenes al chip pasan por `0x12ebfc` (21 llamadas en
+  todo el código). Programan (órdenes `0x80`/`0x10`) sólo `0x131ad0`, `0x131b58`, `0x131bb4` y
+  `0x131c0c`; borra (`0x60`/`0xD0`) sólo `0x1d1540`. El resto son lecturas (`0x00` en `0x130e14`,
+  `0x50` zona de reserva en `0x130e9c`), estado (`0x70`) y reinicio (`0xFF`).
+- Cierre de llamadas directas (`bl`) sobre `work/code_full.s`: desde la escritura de partición
+  `0x1447a0` se llega a programar y borrar en 4 niveles y el cierre se agota en 211 funciones. Desde
+  las lecturas de I4 (`0x14382c`, 34 funciones), I5 (`0x1439d4`, 29), G1 (`0x143774`, 15) y D1
+  (`0x657e0`, 4) el cierre se agota sin tocar ninguna de las cinco. Desde `0x1436fc` (A1, B3, C1,
+  E1, F1) no aparece ninguna en 16 niveles; más allá el cierre abarca todo el firmware (los
+  literales desensamblados como saltos lo contaminan) y deja de informar. Límites: no sigue saltos
+  de cola ni llamadas por puntero. Los archivos se escriben en `B:` (SD), no en la memoria interna.
+- Escriben o borran: `0x1a` A2 (`0x2c0704`), `0x1b` A3 y `0x1c` B2 y `0x27` F2 (`0x2c0450`, borra la
+  partición), `0x1d` B1 (`0x2bcdb8` con `TBM`), `0x1f` C2 (`0x2bcf28`), `0x22` D2, `0x25` E2, `0x29`
+  y `0x2a` formateos, `0x33` 5-en-1. La entrada `0x20` no tiene texto en la lista del menú: consulta
+  `B:\ALLOW_ERASE_BOOT` y llama a `0x2c0450(0)`.
+- Sin determinar: el aspecto del menú en pantalla y sus teclas, y el largo de cada archivo.
+- Kit: `sd_kit/nand_dump/`. Verificador: `tools/verificar_volcados.py` (fallas previstas en
+  `tools/NAND_FALLAS.md`; prueba `tools/e2e_nand.py`, 16 casos).
+
+## Matriz de color v2 (2026-11-12)
+
+- `tools/ajustar_ccm.py` ajusta `CCM_M531` con las cinco fotos de modo 0 que tienen JPG del mismo
+  disparo (1970, 1971, 1978, 1979, 1980): balance del MakerNote, bloques de 32 px, Huber, filas que
+  suman 1 y una curva de tono por foto. Valida dejando una escena fuera (1970 | 1971 | macropad).
+- ΔE2000 medio en la foto retenida, contra el JPG de la cámara: anterior 3,32 · C713 3,35 · nueva
+  2,92 (1970: 4,56/4,94/4,45; 1971: 2,65/2,67/2,05; 1978: 3,15/2,59/2,62; 1979: 3,02/2,75/2,43;
+  1980: 3,23/3,82/3,05). Mejora a la anterior en las cinco. Adoptada; `--matriz c713` sigue igual.
+  Resultado completo en `firmware/stock/ccm_ajustada_v2.json`.
+- Límites: tres escenas de interior y dos luces; la referencia es el JPG de la cámara (reproduce su
+  color, no una carta); el término de regularización se eligió mirando los mismos pliegues (con
+  0,02 hacia la identidad la nueva no gana; quedó en 0, mínimos cuadrados sin regularizar). Los RAW
+  de modo 4 no entraron: su par de modo 0 es otro disparo y no alinea píxel a píxel. Los DNG ya
+  generados en `dump/` llevan la matriz anterior.
+
+## Fe de erratas, añadido del 2026-11-12 (tarde)
+
+- "Falta saber quién usa el bloque 1442": el boot guarda el sector y la cuenta del registro tipo 2
+  en `0x850400`; qué hace con ellos no se leyó.
+- "A1 Calibration.dmp" y "E1 CameraParam.dmp" como un archivo por opción: son dos por opción.
+- "No se flashea nada hasta tener … la vía de recuperación del boot": la vía existe en el código
+  del boot (archivos TBM y DELETE al encender). Falta probarla en la cámara; ver REVERSIBILIDAD.
+- "El cuelgue de la segunda foto en modo 3: sospecha de vista previa mal formateada": la segunda
+  captura y su "JPG" de 224 B se completaron; el cuelgue es posterior y su causa sigue sin probar.
