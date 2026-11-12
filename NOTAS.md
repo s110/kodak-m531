@@ -238,3 +238,14 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   `firmware/stock/iq_runtime_0x4f81e8_0x4f8304.bin` (con hash). Son por unidad (calibración).
 - Qué campo es NR y cuál realce no se puede deducir sólo del código: hace falta comparar la RAM
   tras capturas con ISO y Sharpness distintos (procedimiento en `sd_kit/PASOS.md`, sin SD).
+
+## Prueba 1 en cámara (2026-11-11)
+
+- **Arranque automático confirmado:** al encender aparece "Script" y luego "Run…"; el firmware crea
+  `B:\Batch\BatchScripts.log` y un `.LOG` por script. P1, P4 y P5 corrieron de principio a fin
+  **sin ningún error de sintaxis** (copias en `dump/prueba1/`). El reloj de la cámara marca 13-oct.
+- Lo dibujado con `ScreenString`/`ScreenInt32` no se ve (la pantalla de arranque lo tapa o el OSD no
+  está activo). Para leer valores: `LOG_PRINT <0|1|TRUE|FALSE> <expresión>` escribe en el `.LOG`.
+- Foto tomada después (`101_1964.JPG`): **sin RAW**. Nada vuelve a poner la bandera en 0 al entrar a
+  captura (los otros llamadores del setter son pruebas de fábrica). Hipótesis: el guardado del CFA
+  necesita además el modo de captura 3 → sonda P6 con `Take12BitCCDRaw(1)` y LOG_PRINT.
