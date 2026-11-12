@@ -1,0 +1,14 @@
+Fase 3: JPEG sin realce de bordes del ASIC (sólo RAM, se pierde al apagar).
+
+Batch/BatchScripts.txt corre P8 (RAW de 8 bits + JPG normal) y luego EE0.
+EE0 redirige la curva de realce de la banda ISO <= 159 con Sharpness Normal a una zona de ceros, con
+guardia: si el valor no es el de fábrica (0x4443d0) no escribe nada. Log esperado en EE0.LOG:
+  VERIFY: 4473808   (antes)
+  VERIFY: 4472856   (después)
+
+Prueba: misma escena con detalle fino (texto, tela), trípode o apoyo, ISO fijo 80 o 100, Sharpness
+Normal, sin zoom digital.
+  1. Foto A con el kit de la fase 1 (P8 solo).
+  2. Foto B con este kit (P8 + EE0).
+Comparar bordes y halos en los JPG. El RAW no cambia (el realce sólo afecta al JPG).
+No toca: otras bandas de ISO, Sharpness Bajo/Alto, ASharp (segundo realce) ni la reducción de ruido.

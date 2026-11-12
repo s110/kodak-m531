@@ -387,3 +387,20 @@ Secciones anteriores que quedan superadas (no se reescriben para conservar el hi
   (`dump/raw5/modo4_decodificado.png`).
 - Conclusión práctica: **P9 (modo 4) da RAW de 10 bits efectivos, estable, sin cuelgues**; el JPG de
   ese modo sale rosado (no importa si se usa el RAW). P8 (modo 0) da RAW de 8 bits + JPG correcto.
+
+## Reducción de ruido y realce del JPG (Fable, 2026-11-12) — mapa y primer script
+
+- Pipeline de foto fija: HWIRP → CFR → NRE → ASharp → (ALT) → JPEG (`0x12989c`, variante con NRE
+  `0x1c3410`). Montaje por captura en `0x127ef0`.
+- **Realce del ASIC:** LUT de 35 puntos de 7 bits en `cfg+0x130` → registro `0x0ff50c18`; elegida por
+  `0x1b3930` según Sharpness (byte vivo `0x3dbccb`, setter `0x123448`; 0 Normal, 1 Bajo, 2 Alto) y por
+  banda de ISO (`0x1b399c`, 11 bandas). Los punteros salen de literales de código con una única carga
+  cada uno (tabla completa en el informe de Fable; ISO ≤159 Normal = `0x1b3d80` → `0x4443d0`,
+  curva 0→50). Sospecha fuerte: es ganancia (Bajo = 20, Normal = 50, Alto = 77; baja con el ISO).
+- **NR:** NRE multiescala (`0x1baa88` → `0x511f1c`): por debajo de ISO 221 sólo croma, desde 221 también
+  luma. Sub-bloque Y/C del ASIC: modo 0 hasta ISO 220. ASharp es un segundo realce independiente de
+  Sharpness (desactivable con un parche de código en `0x128900`).
+- **Persistencia:** los pokes a literales viven en RAM; el setter de Sharpness desde script no llega a
+  la NAND salvo que luego se confirme Sharpness en el menú (equivale a elegirlo a mano).
+- Corrección: `0x5dbd0` es el paso de zoom, no el nivel de ISO.
+- Kit `sd_kit/fase3`: P8 + EE0 (realce a cero en ISO ≤159 Normal), verificado contra la RAM.

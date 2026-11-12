@@ -1,0 +1,10 @@
+10 REM EE0: realce del ASIC a cero para ISO hasta 159 y Sharpness Normal: solo RAM
+20 FOREIGN a = Run_SpecifyFunc(1674172, 1, 0, 1785216, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY a
+40 IF a == 4473808 THEN 60
+50 END
+60 FOREIGN p = Run_SpecifyFunc(3050116, 2, 0, 1785216, 4472856, 0, 0, 0, 0)
+70 FOREIGN b = Run_SpecifyFunc(1674172, 1, 0, 1785216, 0, 0, 0, 0, 0)
+80 LOG_PRINT VERIFY b
+90 END
+RUN
