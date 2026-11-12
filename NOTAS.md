@@ -794,3 +794,20 @@ Procedimiento y registro esperado: `sd_kit/PASOS.md`, paso 6.
   función con valor ni una void asignada. Siguen sin correr en la cámara: `peek16`/`poke16` y el
   vaciado de caché (MEMRW, ASHARP0, NRE0), la palabra clave `SYSTEM` y `SYSTEM a = MemRead(...)`
   (MEMRWT), y un `END` ejecutado en mitad del programa (rama de guardia fallida de todos).
+
+## 2026-11-12 — EET probado en la cámara
+
+- `EET.LOG` = `VERIFY: 4472856`; `EETV.LOG` = once `VERIFY: 4472856`. Las 11 bandas de ISO quedaron con el
+  realce a cero y la cámara no se colgó. Fotos y logs en `dump/raw10` (con `SHA256SUMS`).
+- Medidas (misma escena, P8 = modo 0, Sharpness Normal; borde = |laplaciano| JPG / RAW en el centro):
+
+  | foto | kit | ISO | flash | borde JPG/RAW | alta frec. JPG | RAW |
+  |---|---|---|---|---|---|---|
+  | 1985 | P8 solo | 64 | sí | 0,568 | 0,118 | 0,073 |
+  | 1984 | P8 + EE0 | 64 | sí | 0,356 | 0,054 | 0,084 |
+  | 1989 | P8 + EET | 64 | sí | 0,302 | 0,061 | 0,063 |
+  | 1986 | P8 solo | 160 | no | 0,375 | 0,115 | 0,126 |
+  | 1988 | P8 + EET | 135 | no | 0,331 | 0,064 | 0,092 |
+
+- La 1988 salió en ISO 135 (banda ≤ 159, la misma de EE0), así que todavía falta una foto con ISO ≥ 160
+  para ver en la imagen las bandas que sólo EET toca; el log ya prueba que se escribieron.
