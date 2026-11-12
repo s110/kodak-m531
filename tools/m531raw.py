@@ -309,8 +309,16 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
 
 
 # ---------------------------------------------------------------- flujo
+# Formato medido en la cámara real (2026-11-11, fotos 1968/1969): 4320×3264, u16 little-endian,
+# 12 bits útiles, patrón con verdes en (0,0)/(1,1). Si el tamaño coincide, se usa directamente.
+PERFILES = {28_200_960: dict(packing='u16_le', ancho=4320)}
+
+
 def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, invertir=False):
     datos = [open(r, 'rb').read() for r in rutas]
+    perfil = PERFILES.get(len(datos[0])) if packing is None and ancho is None and len(datos) == 1 else None
+    if perfil:
+        packing, ancho = perfil['packing'], perfil['ancho']
     if invertir:
         datos = datos[::-1]
     if packing is None:

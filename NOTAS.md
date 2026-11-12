@@ -295,3 +295,19 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   b=1, c=3. La captura RAW (`0x127168`) sólo exige `SaveCFAonTake == 1`; la hipótesis del "modo 3"
   no tiene respaldo: las fotos sin RAW se explican porque nada se ejecutaba.
 - Sin auditar: escrituras a NAND en la ruta de captura en modo 3 (switch `0x128330`).
+
+## PRIMER RAW REAL (2026-11-11, prueba 4)
+
+- P0 y P6 se ejecutaron (con `RUN`): `VERIFY: 0` → `VERIFY: 1` (SaveCFAonTake) y `VERIFY: 3` (modo de
+  captura `0x3d97a8`). Sintaxis `FOREIGN a = f()`, `LOG_PRINT VERIFY a` confirmadas en la cámara.
+- **Menú oculto abierto** con DELETE+DERECHA en la confirmación de formateo (sin scripts).
+- Fotos 1968 y 1969: `101O19xx.RAW` de **28.200.960 B = 4320×3264, u16 LE, 12 bits útiles**
+  (máx 4095, negro ≈ 117–120), verdes en (0,0)/(1,1) → GRBG, R/B correctos a ojo (LED rosa). DNG
+  revelado con LibRaw: imagen correcta (`dump/raw1/101_1968_preview.png`). Sólo se escribe el
+  archivo 'O' (un único cuadro, no dos campos).
+- Con modo 3 el JPEG sale roto: un "JPG" de 224 B con texto de diagnóstico
+  `Result:IRPTask[3300003] JPEGTask[0] IRPEnd[0]…`; vista previa roja/superpuesta y la segunda foto
+  colgó la cámara. Siguiente: P8 activa sólo `SaveCFAonTake(1)` (la captura en `0x127168` sólo exige
+  esa bandera) para tener RAW + JPEG normal.
+- Conversor: perfil fijo por tamaño (28.200.960 B → u16_le 4320×3264) porque la detección automática
+  falló en la foto oscura 1969.
