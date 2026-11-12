@@ -1,10 +1,10 @@
-10 REM P6: activa RAW de 12 bits y deja los valores en P6.LOG
-20 LET a = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
+10 REM P6: activa RAW de 12 bits y registra bandera antes, despues y modo de captura
+20 FOREIGN a = Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
 30 LOG_PRINT VERIFY a
 40 FOREIGN Take12BitCCDRaw(1)
-50 LET b = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
+50 FOREIGN b = Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
 60 LOG_PRINT VERIFY b
-70 LET c = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4046332, 0, 0, 0, 0, 0)
+70 FOREIGN c = Run_SpecifyFunc(1674172, 1, 0, 4036520, 0, 0, 0, 0, 0)
 80 LOG_PRINT VERIFY c
 90 END
 RUN

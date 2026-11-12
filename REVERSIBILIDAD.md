@@ -15,8 +15,10 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 
 - El firmware sólo lee: carpeta `\HiddenMenu`, archivos vacíos `ENABLE_NAND_TOOL`,
   `DISABLE_AUTO_POWER_OFF`, y `\Batch\BatchScripts.txt` + `*.srt`.
-- Peor caso: un script que cuelga la cámara en cada arranque. Arreglo: sacar la SD (sin SD no
-  hay script) o editarla en el Mac. Por eso **nunca** se ponen scripts en la memoria interna (A:).
+- Peor caso: un script con un error. **Cualquier error de script detiene la CPU** (`0x4b4e0`): la
+  cámara se congela en cada arranque con esa SD. Arreglo: sacar batería y SD, borrar o corregir
+  `\Batch` en el Mac. Nada queda escrito en la NAND. Mitigación: verificador estricto y pruebas
+  nuevas siempre con un script mínimo primero. Por eso **nunca** se ponen scripts en la memoria interna (A:).
 - Lista negra de funciones que ningún script nuestro llama: `Format`, `UpdateFW`, `UpdateCDROMImage`,
   `InfoMgr_*` (escriben calibración), `WriteClampAndOffsetToFlash`, `ToneCCM_WriteLCDTable2Nflash`,
   `FE_WriteStrobeTypeToNANDCali`, `NANDScript*`, `LCD_TypeSetup`, `StrobeScript_SetType`,

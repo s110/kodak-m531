@@ -273,3 +273,25 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   fijo (el escritor genérico es `0x65f68(x, id, valor, y)`).
 - Sonda P7: con guardia, lo pone en 1 en RAM y registra antes/después con `LOG_PRINT VERIFY`.
   `sd_kit/fase1/P7OFF.srt` lo devuelve a 0 si quedara guardado al apagar.
+
+## Verificación de Fable antes de ejecutar (2026-11-11) — correcciones importantes
+
+- **RUN**: las líneas numeradas se guardan; sólo una línea `RUN` sin número las ejecuta
+  (`0x10776c` → `0x107678`). Confirmado por Fable. Todas las pruebas anteriores sólo cargaron.
+- **Sintaxis real** (Fable, verificado): asignar el resultado de una función es
+  `FOREIGN a = Run_SpecifyFunc(...)` (`0x10710c`); `LET a = FOREIGN f()` NO existe (LET sólo evalúa
+  operandos simples, `0x1993b8`). `IF cond THEN 60` (sin GOTO: `0x107578` arma "GOTO" + resto).
+  `LOG_PRINT VERIFY|IGNORE|0|1 <expr sin espacios>` escribe `VERIFY: <valor>` en el .LOG.
+- **Cualquier error de script detiene la CPU** (`0x198adc` → `0x3031dc(-1)` → `0x4b4e0` = `flag 1`
+  + bucle): la cámara se congela en cada arranque con esa SD. Recuperación: sacar batería y SD,
+  corregir o borrar `\Batch`. Por eso el verificador es estricto y la primera prueba es mínima (P0).
+- **"Ajuste 0xF" era un estado de tecla:** `0x6615c` es el manejador de `KeyStateGet`; la tabla
+  `0x495a5c` se pone a cero en cada arranque y refleja el estado de las teclas. 0xF = **DELETE**
+  (0x780 >> 7), 0xA = **DERECHA**, 0xB = OK. **La nota "Sharpness = ajuste 0xA" era errónea** (0xA es la
+  tecla derecha); la tabla de ayuda empareja etiquetas de menú rápido con otra cosa.
+- **Menú oculto (sin scripts):** carpeta `\HiddenMenu` en la SD, Setup → Format → en la pantalla de
+  confirmación, **mantener DELETE y pulsar DERECHA**. P7/P7OFF se descartaron.
+- P6 corregido lee el modo de captura en `0x3d97a8` (= 4036520), no en `0x3dbdfc`. Esperado: a=0,
+  b=1, c=3. La captura RAW (`0x127168`) sólo exige `SaveCFAonTake == 1`; la hipótesis del "modo 3"
+  no tiene respaldo: las fotos sin RAW se explican porque nada se ejecutaba.
+- Sin auditar: escrituras a NAND en la ruta de captura en modo 3 (switch `0x128330`).

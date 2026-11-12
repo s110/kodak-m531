@@ -59,7 +59,9 @@ TABLA = {}
 for e in _mapa:
     TABLA.setdefault(e['nombre'], set()).add(e['palabra_clave'])
 ENTERO = re.compile(r'-?(0|[1-9]\d*)$')
-LLAMADA = re.compile(r'\b(SYSTEM|FOREIGN|DEBUGGING) ([A-Za-z_]\w*)\(([^()]*)\)')
+# Forma verificada (0x10710c): `PALABRA_CLAVE [var =] Funcion(args)`. `LET x = PALABRA_CLAVE f()` NO existe:
+# el evaluador de LET (0x1993b8) sólo acepta operandos simples y cualquier error detiene la CPU (0x4b4e0).
+LLAMADA = re.compile(r'\b(SYSTEM|FOREIGN|DEBUGGING) (?:([A-Za-z][A-Za-z0-9]*) = )?([A-Za-z_]\w*)\(([^()]*)\)')
 
 
 def _args(texto):
@@ -144,7 +146,8 @@ def revisar_srt(ruta):
             continue
         cuerpos.append((n, cuerpo))
     for n, cuerpo in cuerpos:
-        mv = re.match(r'LET ([A-Za-z][A-Za-z0-9]*) = ', cuerpo)
+        mv = re.match(r'LET ([A-Za-z][A-Za-z0-9]*) = ', cuerpo) or \
+            re.match(r'(?:SYSTEM|FOREIGN|DEBUGGING) ([A-Za-z][A-Za-z0-9]*) = ', cuerpo)
         if mv:
             nombre = mv.group(1)
             if nombre in TABLA or nombre in CLAVES or nombre in PERMITIDAS:
@@ -162,10 +165,19 @@ def revisar_srt(ruta):
         sin_texto = re.sub(r'"[^"]*"', '""', cuerpo)
         if re.search(r'(?<![\w.])0\d', sin_texto):
             err('número con ceros a la izquierda')
+        if re.match(r'LET ', sin_texto) and re.search(r'\b(SYSTEM|FOREIGN|DEBUGGING)\b', sin_texto):
+            err('LET con llamada no existe: usar "FOREIGN var = Funcion(...)"')
         llamadas = LLAMADA.findall(sin_texto)
-        for kw, f, args in llamadas:
+        for kw, var, f, args in llamadas:
             _validar_llamada(kw, f, _args(args), variables, err)
+        mlp = re.match(r'LOG_PRINT (\S+) (.*)$', sin_texto)
+        if sin_texto.startswith('LOG_PRINT') and (not mlp or mlp.group(1) not in ('VERIFY', 'IGNORE', '0', '1')
+                                                  or not re.fullmatch(r'[A-Za-z0-9_]+', mlp.group(2))):
+            err('LOG_PRINT debe ser "LOG_PRINT VERIFY|IGNORE|0|1 <variable o número>" sin espacios en la expresión')
+        if re.search(r'\bTHEN\s+(GOTO|GOSUB)\b', sin_texto):
+            err('"THEN GOTO n" no existe: tras THEN va sólo el número de línea ("THEN n")')
         resto = LLAMADA.sub(' ', sin_texto)
+        resto = re.sub(r'^LOG_PRINT (VERIFY|IGNORE)', 'LOG_PRINT', resto)
         for ident in re.findall(r'[A-Za-z_]\w*', resto):
             if ident in TABLA or ident in PERMITIDAS:
                 err(f'{ident} fuera de una llamada válida "PALABRA_CLAVE {ident}(...)"')

@@ -63,13 +63,13 @@ def generar(nombre, parches):
     # Guardia cerrada ante fallos: cada IF salta hacia adelante sólo si la palabra es la de fábrica;
     # si el IF no se cumple, o el intérprete lo ignora, la línea siguiente va al aviso y no escribe.
     for i, (w, o, _) in enumerate(ws):
-        add(f'LET v{i} = FOREIGN Run_SpecifyFunc({PEEK32}, 1, 0, {w}, 0, 0, 0, 0, 0)')
+        add(f'FOREIGN v{i} = Run_SpecifyFunc({PEEK32}, 1, 0, {w}, 0, 0, 0, 0, 0)')
         sigue = n + 20
-        add(f'IF v{i} == {s32(o)} THEN GOTO {sigue}')
+        add(f'IF v{i} == {s32(o)} THEN {sigue}')
         add('GOTO 9000')
     for i, (w, _, nv) in enumerate(ws):
-        add(f'LET r{i} = FOREIGN Run_SpecifyFunc({POKE32}, 2, 0, {w}, {s32(nv)}, 0, 0, 0, 0)')
-        add(f'LET f{i} = FOREIGN Run_SpecifyFunc({FLUSH}, 2, 0, {w}, 4, 0, 0, 0, 0)')
+        add(f'FOREIGN r{i} = Run_SpecifyFunc({POKE32}, 2, 0, {w}, {s32(nv)}, 0, 0, 0, 0)')
+        add(f'FOREIGN f{i} = Run_SpecifyFunc({FLUSH}, 2, 0, {w}, 4, 0, 0, 0, 0)')
     add(f'SYSTEM ScreenString(20, 180, "{nombre[:20]} OK")')
     add('SYSTEM delay_us(1500000)')
     add('END')

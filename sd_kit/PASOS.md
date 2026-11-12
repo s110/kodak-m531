@@ -18,7 +18,8 @@ Antes de empezar: batería cargada. Cámara fuera del USB salvo donde se indique
      128 KB (ver NOTAS.md) y no la falta de soporte: los logs de `Batch/` lo dirán.
 
 ## Paso 2 — Menú oculto y volcados de la NAND Tool (sólo opciones "Dump")
-1. Menu → Setup → About. Debe abrir "HIDDEN MENU".
+1. Con la carpeta `HiddenMenu` en la SD: Menu → Setup → Format → en la pantalla de confirmación
+   (sin confirmar), **mantener DELETE y pulsar DERECHA**. Debe abrir "HIDDEN MENU".
 2. FIRMWARE VERSION: anota BOOT, MAIN, CamOS, IQLib, BFN (o foto con el celular).
 3. NAND TOOL → ejecuta, una por una, **sólo** estas opciones:
    A1 Calibration.dmp · B3 MainCode.dmp · C1 BootCode.dmp · D1 NANDPartition.txt ·

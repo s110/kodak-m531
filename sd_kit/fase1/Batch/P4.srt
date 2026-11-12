@@ -1,9 +1,0 @@
-10 REM lee la bandera RAW (0x3df0e4) con peek32 (0x198bbc) antes y despues
-20 LET a = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
-30 SYSTEM ScreenInt32(20, 110, a)
-40 FOREIGN SaveCFAonTake(1)
-50 LET b = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
-60 SYSTEM ScreenInt32(20, 140, b)
-70 SYSTEM delay_us(3000000)
-80 END
-RUN
