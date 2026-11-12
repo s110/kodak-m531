@@ -811,3 +811,17 @@ Procedimiento y registro esperado: `sd_kit/PASOS.md`, paso 6.
 
 - La 1988 salió en ISO 135 (banda ≤ 159, la misma de EE0), así que todavía falta una foto con ISO ≥ 160
   para ver en la imagen las bandas que sólo EET toca; el log ya prueba que se escribieron.
+
+## 2026-11-12 — M3F2 probado en la cámara: 12 bits reales sin cuelgue
+
+- `M3F2.LOG`, exactamente el esperado: `252054531`, `235211523`, `151391235`, `134548227`, `3`.
+- Dos fotos seguidas (1990 y 1991, separadas 18 s) **sin cuelgue**: el modo 3 con el IRP en formato 2
+  arregla el cuelgue de la segunda foto. Datos en `dump/raw11` (con `SHA256SUMS`).
+- Cada foto deja sólo `101O####.RAW` de 28.200.960 B. **No hay JPG** (ni el de 224 B de antes). La
+  vista previa en pantalla sale rojiza/verde: el IRP lee 16 bits como 12 empaquetados.
+- RAW: u16 LE, máx 4095 (12 bits llenos), negro ≈ 103–118, sin filas vacías, estructura Bayer GBRG
+  correcta (|d| mismo color 20–33 contra 136–203 entre vecinos). `m531raw.py` los convierte a DNG sin
+  cambios. Vista revelada en `dump/raw11/vista_modo3.png`: imagen limpia, colores correctos.
+- La cámara escribe también `MISC/AUTPRINT.MRK` y `MISC/SSECUPLD.XML` al apagar (normal, sin fotos listadas).
+- Pendiente: cuántas fotos seguidas aguanta, el tiempo de guardado (~18 s entre disparos) y si con un
+  disparo durante el guardado se pasa del pool 8 (no probar a propósito).
