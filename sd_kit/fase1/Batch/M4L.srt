@@ -1,0 +1,33 @@
+10 REM M4L EXPERIMENTAL: modo 4 con datos lineales de 12 bits (sin curva) y la vista en vivo en formato 0: solo RAM
+20 FOREIGN a = Run_SpecifyFunc(472806, 1, 0, 1214176, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY a
+40 IF a == 8 THEN 60
+50 END
+60 FOREIGN b = Run_SpecifyFunc(472806, 1, 0, 1189760, 0, 0, 0, 0, 0)
+70 LOG_PRINT VERIFY b
+80 IF b == 30757 THEN 100
+90 END
+100 FOREIGN p = Run_SpecifyFunc(1306778, 2, 0, 1214176, 3, 0, 0, 0, 0)
+110 FOREIGN c = Run_SpecifyFunc(472806, 1, 0, 1214176, 0, 0, 0, 0, 0)
+120 LOG_PRINT VERIFY c
+130 IF c == 3 THEN 150
+140 END
+150 FOREIGN q = Run_SpecifyFunc(1306778, 2, 0, 1189760, 28712, 0, 0, 0, 0)
+160 FOREIGN d = Run_SpecifyFunc(472806, 1, 0, 1189760, 0, 0, 0, 0, 0)
+170 LOG_PRINT VERIFY d
+180 IF d == 28712 THEN 200
+190 END
+200 FOREIGN f = Run_SpecifyFunc(1674172, 1, 0, 1255296, 0, 0, 0, 0, 0)
+210 FOREIGN g = Run_SpecifyFunc(1674172, 1, 0, 1320832, 0, 0, 0, 0, 0)
+220 FOREIGN h = Run_SpecifyFunc(1674172, 1, 0, 1386368, 0, 0, 0, 0, 0)
+230 FOREIGN i = Run_SpecifyFunc(1674172, 1, 0, 1451904, 0, 0, 0, 0, 0)
+240 FOREIGN j = Run_SpecifyFunc(1674172, 1, 0, 1517440, 0, 0, 0, 0, 0)
+250 FOREIGN k = Run_SpecifyFunc(1674172, 1, 0, 1582976, 0, 0, 0, 0, 0)
+260 FOREIGN l = Run_SpecifyFunc(1674172, 1, 0, 1648512, 0, 0, 0, 0, 0)
+270 FOREIGN m = Run_SpecifyFunc(1674172, 1, 0, 1714048, 0, 0, 0, 0, 0)
+280 FOREIGN SaveCFAonTake(1)
+290 FOREIGN r = Run_SpecifyFunc(450736, 1, 0, 4, 0, 0, 0, 0, 0)
+300 FOREIGN e = Run_SpecifyFunc(1674172, 1, 0, 4036520, 0, 0, 0, 0, 0)
+310 LOG_PRINT VERIFY e
+320 END
+RUN

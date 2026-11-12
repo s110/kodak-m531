@@ -85,6 +85,54 @@ otra prueba en la misma sesión (M3F2 va **solo**).
      quedó. Nada queda escrito en la cámara. Para volver a usarla, quitar `Batch/` de la SD.
 7. Al terminar, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS` y restaura el `Batch/` anterior.
 
+## Paso 7 — Pantalla y revisión correctas con RAW de 12 bits (experimental: M3V, luego M4L; M2V de reserva)
+Análisis y predicciones: `../NOTAS.md`, sección "Pantalla, revisión y JPG correctos con RAW de 12 bits".
+Cada script va **solo**: en `Batch/` de la SD quedan únicamente `<nombre>.srt` y `BatchScripts.txt`
+(copia de `fase1/Batch/BatchScripts_<nombre>.txt`). Preparación igual que en el paso 6.1: borrar
+`.LOG` y `.srt` anteriores, `cp -X`, `dot_clean`, verificador sobre la SD (`OK`), hashes contra el
+kit. Antes: `python3 -I tools/e2e_scripts.py` (26 casos). Quickview de la cámara en **On**.
+Entre un script y otro: apagar y sacar la batería unos segundos. Una foto por vez, esperando el guardado.
+
+### 7a — M3V (modo 3; sólo primitivas ya probadas)
+1. Encender y esperar "Script / Run…". Mirar la pantalla **antes de disparar**: debe verse la
+   escena normal (con M3F2 salía rojiza/verde).
+2. Dos fotos, esperando el guardado de cada una. Apagar y traer la SD.
+3. `Batch/M3V.LOG`: `VERIFY: 252054531`, `VERIFY: 235211523`, `VERIFY: 151391235`,
+   `VERIFY: 50662147`, `VERIFY: 3`.
+4. Esperado: vista en vivo normal antes y después de cada foto; revisión tras el disparo con ruido;
+   por foto un `101O####.RAW` de 28.200.960 B y ningún JPG (como M3F2).
+5. Si la vista sigue con ruido, la tabla `0x1286dc` no es la de la vista en vivo: anotarlo y no
+   seguir con 7b hasta revisar el análisis.
+
+### 7b — M4L (modo 4 lineal de 12 bits; estrena peek16/poke16 y cambia una instrucción)
+1. Encender y esperar "Script / Run…". La pantalla debe verse normal.
+2. Foto 1: escena con zonas claras (pared blanca, ventana). Esperar el guardado. Foto 2 y foto 3:
+   escenas normales. Apagar y traer la SD.
+3. `Batch/M4L.LOG`: `VERIFY: 8`, `VERIFY: 30757`, `VERIFY: 3`, `VERIFY: 28712`, `VERIFY: 4`.
+4. Esperado por foto: revisión en pantalla normal, JPG normal (sin tinte rosado) y `101O####.RAW`
+   de 21.150.720 B con 12 bits lineales (máximo por encima de 1020; hasta 4095 en zonas quemadas).
+   Convertir con `tools/m531raw.py dng … --packing p12_lsb --width 4320 --cfa GBRG --black 0 --white 4095`.
+5. Cómo leer un resultado distinto:
+   - Cámara congelada al encender: batería y SD fuera. `M4L.LOG` vacío o sin `VERIFY`: falló la
+     primera llamada a `peek16`. Nada queda escrito en la cámara.
+   - Una o dos líneas y cámara normal: una guardia no coincidió, no se escribió nada. Si la primera
+     es `3`, la RAM no se reinició: sacar la batería y repetir.
+   - Log completo, JPG rosado y RAW con máximo ≤ 1020: corrió la instrucción vieja (cachés). El
+     resultado equivale a P9 con la pantalla arreglada. Si la primera foto sale así y las
+     siguientes bien, anotarlo: es el mismo efecto.
+   - Log completo y JPG oscuro, quemado o con dominante: guardar RAW y JPG tal cual para medir.
+6. No usar el modo 0 con M4L cargado: apagar primero.
+
+### 7c — M2V (reserva: modo 2, 10 bits; sin tocar código)
+Sólo si 7b no da un JPG correcto.
+1. Igual que 7a: pantalla normal antes de disparar; tres fotos.
+2. `Batch/M2V.LOG`: `VERIFY: 235211523`, `VERIFY: 235080451`, `VERIFY: 2`.
+3. Esperado por foto: revisión y JPG con imagen correcta y medios algo más oscuros que en modo 0;
+   `101O####.RAW` de 17.625.600 B (10 bits empaquetados, mismos datos que el modo 4).
+4. JPG de 224 B o cuelgue: el modo 2 no es utilizable; batería y SD fuera, traer la SD.
+
+Al terminar cada tramo, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS`.
+
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los
 `*.log` del intérprete), `TP$BATCH` y `TEMP.SRT` si aparecen en la raíz, y los `._*`, `.fseventsd`,

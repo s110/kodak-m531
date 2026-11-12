@@ -23,6 +23,16 @@ Cómo puede fallar el verificador (escrito antes del código; cada punto es un c
   F7. Deja pasar nombres de variable de más de una letra (válidos por 0x29bce8, nunca ejecutados).
   F8. Informa el error en otra línea o en otro archivo: quien corrige no encuentra la causa.
   F9. La corrección de EET (EET + EETV) no pasa, o el juego que va a la SD no es el del repo.
+  F10. Un script que parchea la RAM (M3V, M4L, M2V) lleva un número decimal mal convertido: la guardia
+      no coincide con los bytes de fábrica (en la cámara: script que termina sin hacer nada, viaje
+      perdido), la escritura cambia bytes que no son los previstos, o el byte nuevo de una tabla de
+      saltos no cae en la instrucción buscada (en la cámara: salto a mitad de otra instrucción). El
+      verificador no puede verlo: sólo conoce direcciones permitidas, no su contenido. Se coteja con
+      firmware/stock/rec0_code_0x48000.bin, no con los números del propio script.
+  F11. Una escritura sin guardia previa o sin relectura posterior del mismo valor, o con anchos
+      mezclados (guardia de 32 bits y escritura de 16).
+  F12. La lista BatchScripts_<nombre>.txt de un script experimental nombra otra cosa, o ese juego,
+      armado solo como iría a la SD, no pasa el verificador.
 
 Corre la CLI de verdad sobre carpetas armadas en work/e2e_scripts/. Artefacto:
 work/e2e_scripts/reporte.json (veredicto por caso, salida de la CLI y SHA-256 de cada script).
@@ -41,6 +51,22 @@ OUT = os.path.join(RAIZ, 'work', 'e2e_scripts')
 KIT = os.path.join(RAIZ, 'sd_kit')
 RAM = os.path.join(RAIZ, 'dump', 'ram_snapshot.bin')
 COLGADO = os.path.join(RAIZ, 'dump', 'raw9')
+STOCK = os.path.join(RAIZ, 'firmware', 'stock', 'rec0_code_0x48000.bin')
+STOCK_BASE = 0x48000
+PEEK = {0x198bbc: 4, 0x736e6: 2}   # peek32, peek16
+POKE = {0x2e8a84: 4, 0x13f09a: 2}  # poke32, poke16
+# Tablas de saltos modo -> formato del IRP: destino = tabla + 2·byte. Instrucción que debe haber en
+# el destino para cada formato (leída en el desensamblado): foto 0x128344 `mov_s r0,N` (0xd800 + N);
+# vista en vivo 0x1286dc, formato 0 = `st_s r14,[r13,0x2c]` (0xa5cb, con r14 = 0 desde 0x128558).
+SALTO_FOTO, SALTO_VISTA = 0x128344, 0x1286dc
+# Por script: {dirección del byte que cambia: (qué es, comprobación del byte nuevo)}.
+PARCHES = {
+    'M3V': {0x128347: ('tabla', SALTO_FOTO, 0xd802), 0x1286df: ('tabla', SALTO_VISTA, 0xa5cb)},
+    'M2V': {0x1286de: ('tabla', SALTO_VISTA, 0xa5cb)},
+    # 0x122780 `or_s r0,r0,r1` (0x7825) -> `mov_s r0,r1` (0x7028): cambian sus dos bytes
+    'M4L': {0x1286e0: ('tabla', SALTO_VISTA, 0xa5cb), 0x122780: ('codigo', 0x7825, 0x7028),
+            0x122781: ('codigo', 0x7825, 0x7028)},
+}
 TABLAS = {'FOREIGN': 0x486334, 'SYSTEM': 0x4871f4, 'DEBUGGING': 0x487404}
 TIPOS = {0: 'int', 1: 'float', 2: 'str', 6: 'void'}
 LINEA_COLGADA = '460 FOREIGN Run_SpecifyFunc(3050116, 2, 0, 1785216, 4472856, 0, 0, 0, 0)'
@@ -120,6 +146,67 @@ def firmas_del_firmware():
     return cat, out
 
 
+def revisar_parches(nombre, crudo=None):
+    """F10 + F11 sobre un script de sd_kit/fase1/Batch (o sobre `crudo`). Devuelve (ok, detalle)."""
+    fw = open(STOCK, 'rb').read()
+
+    def de_fabrica(dir_ram, n):
+        return int.from_bytes(fw[dir_ram - STOCK_BASE:dir_ram - STOCK_BASE + n], 'little')
+
+    texto = (crudo or leer('fase1', 'Batch', nombre + '.srt')).decode('ascii')
+    lineas = [l.split(' ', 1)[1] for l in texto.splitlines() if re.match(r'\d+ ', l)]
+    llamada = re.compile(r'FOREIGN ([a-z]) = Run_SpecifyFunc\((\d+), (\d+), 0, (\d+), (\d+), 0, 0, 0, 0\)$')
+    lecturas, condiciones, escrituras, problemas = {}, {}, [], []
+    for n, l in enumerate(lineas):
+        m = llamada.match(l)
+        if m and int(m.group(2)) in PEEK:
+            lecturas[m.group(1)] = (n, int(m.group(4)), PEEK[int(m.group(2))])
+        elif m and int(m.group(2)) in POKE:
+            escrituras.append((n, int(m.group(4)), POKE[int(m.group(2))], int(m.group(5))))
+        mi = re.match(r'IF ([a-z]) == (\d+) THEN \d+$', l)
+        if mi:
+            condiciones[mi.group(1)] = (n, int(mi.group(2)))
+    tocados = {}
+    for n, direccion, ancho, valor in escrituras:
+        antes = [(lecturas[v][0], condiciones[v][1]) for v in condiciones
+                 if v in lecturas and lecturas[v][1:] == (direccion, ancho) and condiciones[v][0] < n]
+        despues = [condiciones[v][1] for v in condiciones
+                   if v in lecturas and lecturas[v][1:] == (direccion, ancho) and lecturas[v][0] > n]
+        if not antes:
+            problemas.append(f'{direccion:#x}: escritura sin guardia previa del mismo ancho')
+            continue
+        guardia = max(antes)[1]
+        if guardia != de_fabrica(direccion, ancho):
+            problemas.append(f'{direccion:#x}: la guardia {guardia:#x} no es el valor de fábrica '
+                             f'{de_fabrica(direccion, ancho):#x}')
+        if despues != [valor]:
+            problemas.append(f'{direccion:#x}: se escribe {valor:#x} y la relectura espera {despues}')
+        for i in range(ancho):
+            viejo, nuevo = guardia >> 8 * i & 0xff, valor >> 8 * i & 0xff
+            if viejo != nuevo:
+                tocados[direccion + i] = nuevo
+    previstos = PARCHES[nombre]
+    if set(tocados) != set(previstos):
+        problemas.append(f'bytes cambiados {sorted(map(hex, tocados))}, previstos {sorted(map(hex, previstos))}')
+    for direccion, nuevo in tocados.items():
+        if direccion not in previstos:
+            continue
+        clase, x, y = previstos[direccion]
+        if clase == 'tabla':  # el byte nuevo, como desplazamiento, debe caer en la instrucción y
+            if de_fabrica(x + 2 * nuevo, 2) != y:
+                problemas.append(f'{direccion:#x}: el byte {nuevo:#x} salta a {x + 2 * nuevo:#x}, donde no está {y:#x}')
+        else:                 # la palabra de 16 bits pasa de x a y
+            base = direccion & ~1
+            ahora = de_fabrica(base, 2)
+            for d, b in tocados.items():
+                if d & ~1 == base:
+                    ahora = ahora & ~(0xff << 8 * (d - base)) | b << 8 * (d - base)
+            if de_fabrica(base, 2) != x or ahora != y:
+                problemas.append(f'{base:#x}: se esperaba {x:#x} -> {y:#x}, sale {de_fabrica(base, 2):#x} -> {ahora:#x}')
+    return not problemas and bool(escrituras), \
+        f'{len(escrituras)} escritura(s), bytes cambiados {sorted(map(hex, tocados))}; problemas: {problemas}'
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     os.makedirs(OUT)
@@ -157,6 +244,19 @@ def main():
            f'{len(guardias)} guardias, {len(pokes)} escrituras, {len(relee)} relecturas, mismas direcciones en el '
            f'mismo orden: {guardias == pokes == relee}; todas las guardias antes de la primera escritura: '
            f'{ultima_guardia < primera_escritura}')
+
+    # F10 + F11 + F12: scripts experimentales de modo RAW (cada uno va SOLO a la SD)
+    for nombre in sorted(PARCHES):
+        ok, detalle = revisar_parches(nombre)
+        anotar(f'parches_{nombre}', 'F10 F11', ok, detalle)
+        lista = open(os.path.join(KIT, 'fase1', 'Batch', f'BatchScripts_{nombre}.txt')).read().split()
+        anotar(f'sd_{nombre}_lista', 'F12', lista == [nombre], f'BatchScripts_{nombre}.txt = {lista}')
+        debe_pasar(f'sd_{nombre}', 'F12',
+                   carpeta(f'sd_{nombre}', {nombre + '.srt': leer('fase1', 'Batch', nombre + '.srt')}, lista))
+
+    # F10: el control detecta un decimal mal convertido (guardia de M4L con un dígito cambiado)
+    ok, detalle = revisar_parches('M4L', mutar(leer('fase1', 'Batch', 'M4L.srt'), 'IF b == 30757', 'IF b == 30767'))
+    anotar('parches_M4L_guardia_mutada', 'F10', not ok and 'no es el valor de fábrica' in detalle, detalle)
 
     # F1 + F8: el script que colgó la cámara, tal cual quedó respaldado
     colgado = open(os.path.join(COLGADO, 'EET.srt'), 'rb').read()

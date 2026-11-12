@@ -825,3 +825,151 @@ Procedimiento y registro esperado: `sd_kit/PASOS.md`, paso 6.
 - La cámara escribe también `MISC/AUTPRINT.MRK` y `MISC/SSECUPLD.XML` al apagar (normal, sin fotos listadas).
 - Pendiente: cuántas fotos seguidas aguanta, el tiempo de guardado (~18 s entre disparos) y si con un
   disparo durante el guardado se pasa del pool 8 (no probar a propósito).
+
+## 2026-11-12 — Pantalla, revisión y JPG correctos con RAW de 12 bits: análisis y scripts M3V, M4L, M2V
+
+Objetivo: que la pantalla y la revisión tras el disparo muestren una imagen normal y que el RAW
+conserve los 12 bits. Análisis estático sobre `firmware/stock/rec0_code_0x48000.bin`,
+`dump/ram_snapshot.bin`, `work/code_full.s` y Ghidra. Sin cámara: nada de esta sección está probado
+en ella todavía.
+
+**Resumen**
+- La pantalla con ruido tiene una causa propia, separada del JPG: el IRP de la vista en vivo toma su
+  formato de la tabla `0x1286dc` según el modo de captura, y el sensor entrega la vista siempre en
+  8 bits. Con un byte de esa tabla la vista queda como en el modo 0. Sirve en los modos 2, 3 y 4.
+- El JPG rosado del modo 4 sale porque el IRP trata los formatos de 12 bits como datos lineales y
+  el sensor, en ese modo, manda códigos de 10 bits comprimidos con la curva.
+- El contenedor de 16 bits del modo 3 queda fuera del alcance del IRP: 2160 palabras por línea
+  contra un tope de 2047. Ninguna vía sólo-RAM segura hace que el IRP lo lea, así que en modo 3 la
+  revisión y el JPG siguen sin salir. Lo que sí se arregla en modo 3 es la vista en vivo (`M3V`).
+- Los mismos 12 bits lineales caben en el contenedor empaquetado del modo 4, que el IRP sí lee.
+  Para eso hay que apagar la curva en la captura: una instrucción de 16 bits en una función que
+  sólo corre al disparar (`M4L`). Es la vía que cumple el objetivo completo.
+- Reserva sin tocar código: el modo 2 (10 bits empaquetados), único modo extendido donde sensor e
+  IRP están pensados para entenderse (`M2V`).
+
+**Leído en el código**
+1. *Tabla de linealización del IRP.* `0x1b172c` (`0x1b177a–0x1b1786`): con formato 2 o 6 pone
+   `ctx+0x41 = 1` (tabla apagada). Con los demás la enciende si `[0x3df4f8+0x172] < 0x1900` y
+   elige la tabla: formato 0 → `0x123704()` = `[0x4d1f04]` = `0x42c068`; resto → `0x123710()` =
+   `[0x4d1f08]` = `0x42c870`. El cargador `0x2de294` copia 1024 entradas u16 a `0x0ff52000 + 4·i`
+   y tres valores finales (4095). `0x42c068` sólo tiene datos en los índices múltiplos de 4 (código
+   de 8 bits × 4) y sale 0–4092; `0x42c870` usa los 1024 y sale 0–4095. El IRP trabaja por dentro
+   en 12 bits lineales con el negro restado, y eso es lo que espera recibir tal cual en los
+   formatos 2 y 6.
+2. *Formato de salida del sensor* (registro `0x0ff10080`). `0x17ac50`: bits 2–3 = contenedor
+   (modo 0: 8 bits; 1 y 3: 16 bits; 2 y 4: empaquetado), bit 11 = 12 bits (modos 3 y 4).
+   `0x17ae50`: bits 12–13 = desplazamiento, que `0xe3540` elige con la bandera de curva y el modo:
+
+   | | modo 0 | modos 1–2 | modos 3–4 |
+   |---|---|---|---|
+   | sin curva (dato de 12 bits) | 2 | 1 | 0 |
+   | con curva (dato de 10 bits) | 1 | 0 | 0 |
+
+   La curva de captura (`0x1b0250`) son 1024 bytes de `0x427e14` multiplicados por 4: sale un código
+   de 10 bits con tope `0x3fc` = 1020, el máximo medido en los RAW de modo 4. En modo 4 el
+   desplazamiento es 0, así que el contenedor de 12 bits lleva el código de 10 bits sin escalar.
+   El IRP lo toma por lineal: sombras iguales (la curva es 1:1 hasta ~312), claros a 0,25–0,6 de su
+   valor antes del balance de blancos. Resultado: negros neutros y claros rosados, que es lo que
+   muestran los JPG de `dump/raw3`.
+3. *Etapas de la captura* (`0x147670`, una por bit de la palabra de banderas): bit 3 → `0xe1128`
+   (cuatro u16, uno por canal: nivel de negro), bit 6 → `0xe1474` (tres ganancias), bit 7 →
+   `0xe1580` (curva). La captura normal (`0x12273c`) arma las banderas en `0x122778–0x122782`:
+   `[0x1228ec]` (= `0x3048`) OR `[0x511580]` (= `0x80`, lo escribe `0x1b0250` en cada disparo). La
+   captura lineal (`0x1228f0`, banderas `0x3000`: sin negro, sin ganancias, sin curva) sólo entra
+   con SaveCFAonTake = 1 y modo = 3 (`0x128f9c–0x128fa6`). `0x12273c` tiene dos llamadores, los dos
+   de captura (`0x128fd2`, `0x129162`); `0x1b0250` sólo lo llama `0x12273c`.
+4. *Vista en vivo.* La tarea `0x59aca` configura el IRP por cada cuadro: `0x5a97c` → `0x127fac` →
+   `0x12853c`, con el tamaño de `0xdb0e8`, `ctx+0x41 = 1` fijo (`0x12877e`) y el formato sacado de
+   la tabla `0x1286dc` con el modo global (`0x1286c6`). El arranque del flujo del sensor para la
+   vista (`0xdb140`, tramo `0xdb2a8–0xdb2ea`) llama a `0x17ac50(0)`: 8 bits, sin mirar el modo.
+   En modo 0 coinciden. En los modos 2, 3 y 4 el IRP lee esos 8 bits como 10 empaquetados, 16 o
+   12 empaquetados. M3F2 dejó esa entrada en formato 2 (12 empaquetados).
+5. *Tabla `0x1286dc`.* Bytes `03 0b 05 0e` + `08 00`; destino = `0x1286dc + 2·byte`. El formato 0
+   es el byte `03` → `0x1286e2` = `st_s r14,[r13,0x2c]` (`0xa5cb`), con `r14 = 0` desde `0x128558`.
+   La entrada del modo 4 vive en la palabra siguiente (`0x1286e0` = `0xa5cb0008`), que tiene el
+   bit 31: se lee y escribe en 16 bits.
+6. *Revisión tras el disparo.* `0xf0d14` reduce a 640×480 la salida YUV del IRP de la foto
+   (`0xf117c`). No hay otra fuente: si el IRP de la foto procesa mal, la revisión sale mal.
+7. *Por qué el modo 3 no tiene arreglo en el IRP.* `0x2afe48` programa el paso de línea en palabras
+   de 32 bits en `0x0ff50410` (`0x2dcddc`, máscara de 12 bits). El validador (`0x2b028a`) rechaza
+   más de `0x1ffc` B = 2047 palabras; 4320 px × 2 B son 2160. El paso explícito (`ctx+0x70`) existe
+   pero `0x127ff4` lo pone a cero en cada foto. Saltar el validador pide cambiar una instrucción de
+   una función que corre con cada cuadro de la vista, y nada en el código dice que el ASIC acepte
+   líneas de 2160 palabras. Descartado.
+8. *Modo 2.* Sensor: empaquetado de 10 bits, desplazamiento 0, o sea el mismo código de 10 bits
+   del modo 4 sin relleno. RAW = 4320·3264·10/8 = 17.625.600 B (`0x76680`). IRP formato 1: pasa el
+   validador (5400 B por línea, ancho múltiplo de 16), pide 17.625.600 B (`0x2afaa8`) y decodifica
+   con `0x42c870`.
+
+**Deducido (sin prueba en la cámara)**
+- *M4L.* Con las banderas en `0x3048` (sin el bit 7) y modo 4: negro restado, ganancias, sin curva,
+  desplazamiento 0, 12 bits empaquetados. Es el dominio que el IRP espera en formato 2. La
+  captura sin curva está prevista en el firmware (fila "sin curva" de `0xe3540`, rama `0xe150c` de
+  `0x147670`) y corrió en la cámara con el modo 3; el empaquetado de 12 bits es el de P9. Lo nuevo
+  es juntarlos y mantener encendidas las etapas de negro y ganancias sin la curva detrás.
+- *Tabla del modo 2.* `0x42c870` no es la inversa exacta de la curva de captura: valor lineal →
+  código → `0x42c870` da 1024 → 856, 2048 → 1600, 3072 → 2258 (la tabla de 8 bits da 1064, 2116,
+  3160). El JPG del modo 2 saldría con los medios y claros hasta un 29 % más oscuros que el del
+  modo 0: imagen correcta de forma y color aproximado, con otro tono.
+- *Cachés.* M4L cambia una instrucción. `poke16` escribe por la caché de datos; la CPU ejecuta lo
+  que haya en la memoria (o en una caché de instrucciones, si existe) cuando esa línea se cargue.
+  A `0x12273c` sólo la llaman funciones de captura: antes del primer disparo su línea no está
+  cargada como código.
+  Para empujar la línea escrita a la memoria, el script lee después ocho direcciones separadas
+  64 KB (`0x132780`…`0x1a2780`): caen en el mismo conjunto de la caché de datos para cualquier
+  tamaño de vía hasta 64 KB y desalojan la línea con asociatividad hasta 8. Sólo usa `peek32`.
+  Si aun así corre la instrucción vieja, el resultado es exactamente P9 (RAW con máximo 1020 y JPG
+  rosado): se nota en el RAW y no rompe nada.
+
+**Scripts** (`sd_kit/fase1/Batch`, fuera de `BatchScripts.txt`; cada uno va solo en la SD)
+
+| script | qué escribe en RAM | modo | RAW | pantalla | revisión y JPG |
+|---|---|---|---|---|---|
+| `M3V` | M3F2 con otro byte: `0x128344` → `0x09060c03`, `0x1286dc` → `0x03050b03` | 3 | 28.200.960 B, u16, 12 bits lineales con negro (igual que M3F2) | normal | sin JPG; revisión con ruido |
+| `M4L` | `0x1286e0`: `0x0008` → `0x0003`; `0x122780`: `or_s r0,r0,r1` (`0x7825`) → `mov_s r0,r1` (`0x7028`) | 4 | 21.150.720 B, 12 bits empaquetados (lsb), lineales, negro restado, máximo 4095 | normal | normales |
+| `M2V` | `0x1286dc` → `0x0e030b03` | 2 | 17.625.600 B, 10 bits empaquetados, comprimidos con la curva | normal | normales, con los medios más oscuros |
+
+- `M3V` y `M2V` usan sólo `peek32`, `poke32`, el setter de modo y SaveCFAonTake: todo eso ya corrió.
+  `M3V` difiere de M3F2 en un número (`50662147` en vez de `134548227`).
+- `M4L` estrena `peek16` (`0x736e6`) y `poke16` (`0x13f09a`). Motivo: las dos palabras que toca
+  tienen el bit 31 y el intérprete no admite literales negativos en un `IF`, así que con `peek32` no
+  hay guardia posible. Las dos primitivas son colas de función con la misma forma que las probadas
+  (`j_s.d [blink]` + `ldw_s r0,[r0,0]` / `stw_s r1,[r0,0]`; `peek32` es `j_s.d [blink]` +
+  `ld_s r0,[r0,0]`), iguales en el firmware de fábrica y en la RAM. `Run_SpecifyFunc` salta con
+  `jl_s [r13]`, que admite destinos pares no múltiplos de 4: las tablas de saltos del propio
+  firmware lo hacen en cada foto (`j_s [r12]` a `0x12834a`). `ldw_s` extiende con ceros: los
+  valores leídos (8, 30757) son positivos.
+- `M4L` hace primero las dos guardias (sólo lecturas) y después escribe; si una guardia falla,
+  termina sin escribir. Una escritura a medias es inocua: la entrada de tabla sólo se usa en modo 4
+  y el modo se pone al final.
+- Mientras `M4L` esté en RAM, una foto en modo 0 saldría mal (8 bits lineales contra un IRP que
+  espera la curva). El script deja el modo 4; apagar la cámara lo deshace todo.
+- `tools/e2e_scripts.py` coteja las guardias y los bytes cambiados de los tres scripts con el
+  firmware de fábrica y comprueba que cada byte de tabla nuevo salta a la instrucción buscada
+  (casos F10–F12, 26 casos en total).
+
+**Conversión del RAW de M4L.** El perfil de 21.150.720 B de `m531raw.py` supone el código de 10 bits
+y lo decodifica. Para un RAW lineal de M4L, pasar el formato a mano hasta ajustar el perfil con
+fotos reales: `--packing p12_lsb --width 4320 --cfa GBRG --black 0 --white 4095`. Señal de que el
+parche actuó: máximo del RAW por encima de 1020.
+
+**Riesgo que queda**
+- `M4L`: primera ejecución de `peek16`/`poke16`. Si la cámara se congela al encender, batería y SD
+  fuera; nada queda escrito en la cámara.
+- `M4L`: que corra la instrucción vieja por las cachés (resultado: P9), o que el modo 4 lineal
+  tenga un efecto no leído (la combinación no existe de fábrica). Un cuelgue se resuelve igual.
+- `M2V`: el modo 2 nunca corrió en esta cámara. Pasa el validador que tumbaba al modo 3; el resto
+  del recorrido es el de los modos 0 y 4.
+- Los tres: la regla de un disparo por vez sigue vigente (ranura 1 del pool 8).
+- La identificación de la tarea `0x59aca` como vista en vivo es por su estructura (cuatro búferes
+  en rotación, evento por cuadro, tamaño de `0xdb0e8`); `M3V` la confirma o la refuta en la cámara
+  con el menor cambio posible.
+
+**Siguientes opciones si M4L falla**
+1. `M4L` más `dcache_flush_range` (`0x24e140`) sobre `0x122780`, si el RAW sale con máximo 1020.
+2. `M2V` (10 bits, sin tocar código).
+3. Modo 4 con la captura lineal del modo 3 (`0x128fa4`: `cmp_s r0,3` → `cmp_s r0,4`): RAW idéntico
+   al del modo 3 pero empaquetado; el JPG saldría con velo, porque el IRP no resta el negro (~110).
+
+Procedimiento y registros esperados: `sd_kit/PASOS.md`, paso 7.

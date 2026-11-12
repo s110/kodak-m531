@@ -10,7 +10,10 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
   - `P9` (modo 4): RAW de 10 bits efectivos, estable; el JPG de la cámara sale rosado.
   - `P8` (modo 0): RAW de 8 bits comprimidos + JPG normal.
   - `P6` (modo 3): 12 bits reales, pero rompe el JPG y cuelga la cámara en la segunda foto.
-    `M3F2` (experimental, revisado contra el código, sin probar en la cámara): modo 3 con el IRP en el formato del modo 4.
+    `M3F2` (probado): modo 3 con el IRP en el formato del modo 4; 12 bits reales sin cuelgue, sin JPG
+    y con la pantalla con ruido.
+  - `M3V`, `M4L`, `M2V` (experimentales, sin probar): pantalla, revisión y JPG correctos con RAW de
+    12 bits. `M4L` es la vía completa (modo 4 con 12 bits lineales); ver `sd_kit/PASOS.md`, paso 7.
 - **Conversor RAW → DNG** (`tools/m531raw.py`, `tools/convertir_carpeta.py`): formato por tamaño,
   curva de descompresión del firmware, patrón GBRG, matriz ajustada; balance desde el JPG (modo 0) o
   por foto desde el propio RAW (modo 4, parche blanco con reserva a un neutro fijo).

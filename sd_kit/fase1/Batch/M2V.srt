@@ -1,0 +1,16 @@
+10 REM M2V EXPERIMENTAL: modo 2 (10 bits empaquetado) con la vista en vivo en formato 0: solo RAM
+20 FOREIGN a = Run_SpecifyFunc(1674172, 1, 0, 1214172, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY a
+40 IF a == 235211523 THEN 60
+50 END
+60 FOREIGN p = Run_SpecifyFunc(3050116, 2, 0, 1214172, 235080451, 0, 0, 0, 0)
+70 FOREIGN c = Run_SpecifyFunc(1674172, 1, 0, 1214172, 0, 0, 0, 0, 0)
+80 LOG_PRINT VERIFY c
+90 IF c == 235080451 THEN 110
+100 END
+110 FOREIGN SaveCFAonTake(1)
+120 FOREIGN r = Run_SpecifyFunc(450736, 1, 0, 2, 0, 0, 0, 0, 0)
+130 FOREIGN e = Run_SpecifyFunc(1674172, 1, 0, 4036520, 0, 0, 0, 0, 0)
+140 LOG_PRINT VERIFY e
+150 END
+RUN
