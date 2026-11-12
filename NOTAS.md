@@ -311,3 +311,18 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   esa bandera) para tener RAW + JPEG normal.
 - Conversor: perfil fijo por tamaño (28.200.960 B → u16_le 4320×3264) porque la detección automática
   falló en la foto oscura 1969.
+
+## RAW con JPEG normal (2026-11-11, prueba 5 — P8)
+
+- P8 (`FOREIGN SaveCFAonTake(1)` sólo): `VERIFY 0 → 1`, modo de captura 0. Fotos 1970 y 1971: **JPG
+  normal + `101O####.RAW` de 14.100.480 B = 4320×3264, 1 byte/píxel**, sin cuelgues.
+- Los 8 bits vienen comprimidos y con el negro ya restado. La tabla de descompresión 8→10 bits está
+  en RAM en `0x429c4c` (copia en `0x42a24c`; la inversa justo antes) y es **idéntica a la de la C713**.
+- **Patrón Bayer real: GBRG.** La heurística daba GRBG; el ajuste RAW↔JPG (JPG = RAW recortado 16/24 px
+  por lado y rotado −90°) dio una matriz con diagonal invertida hasta cambiar R↔B.
+- Conversor: perfiles por tamaño (14.100.480 → u8 + tabla, 28.200.960 → u16 12 bits), CFA GBRG,
+  balance por foto ajustado contra el JPG hermano (fallback mundo gris), CCM ajustada M531
+  (`firmware/stock/ccm_ajustada_1970_1971.json`, provisional: 2 escenas de interior) o `--matriz c713`.
+  Comparación visual: `dump/raw2/comparacion_matrices.png`.
+- La orientación: el RAW sale en la orientación del sensor; el JPG lo rota la cámara (sensor de
+  orientación). No se fuerza rotación en el DNG.

@@ -244,13 +244,64 @@ _SRGB_A_XYZ = np.array([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522
                         [0.0193339, 0.1191920, 0.9503041]])
 
 
-def _matriz_color():
-    cam_a_xyz = _SRGB_A_XYZ @ _CCM_C713
+def _matriz_color(ccm=None):
+    cam_a_xyz = _SRGB_A_XYZ @ (_CCM_C713 if ccm is None else ccm)
     return np.linalg.inv(cam_a_xyz)
 
 
+def neutro_desde_jpg(ruta_raw, img, cfa):
+    """Balance de la cámara: ajusta RAW (lineal) ↔ JPG hermano (sRGB linealizado) y devuelve el
+    AsShotNeutral (respuesta de la cámara al blanco). None si no hay JPG o no alinea."""
+    d, n = os.path.split(ruta_raw)
+    ruta = os.path.join(d, n[:3] + '_' + n[4:8] + '.JPG')
+    if not os.path.exists(ruta) or img.shape != (3264, 4320):
+        return None
+    from PIL import Image
+    pos = {c: [(i // 2, i % 2) for i, ch in enumerate(cfa) if ch == c] for c in 'RGB'}
+    a = img.astype(np.float64) / 1023
+    canal = {c: np.mean([a[y::2, x::2] for y, x in pos[c]], axis=0) for c in 'RGB'}
+    raw = np.dstack([canal['R'], canal['G'], canal['B']])
+    def bloque(x, k):
+        h, w = x.shape[0] // k * k, x.shape[1] // k * k
+        return x[:h, :w].reshape(h // k, k, w // k, k, -1).mean(axis=(1, 3))
+    mejor = None
+    for rot in (0, -90, 90):
+        s = np.asarray(Image.open(ruta).convert('RGB').rotate(rot, expand=True)).astype(np.float64) / 255
+        if s.shape[:2] != (3216, 4288):
+            continue
+        lin = np.where(s <= 0.04045, s / 12.92, ((s + 0.055) / 1.055) ** 2.4)
+        jj = bloque(lin, 2)
+        rr = raw[12:12 + jj.shape[0], 8:8 + jj.shape[1]]
+        A, B = bloque(rr, 8).reshape(-1, 3), bloque(jj, 8).reshape(-1, 3)
+        ok = (A.max(1) < 0.95) & (B.max(1) < 0.95) & (A.min(1) > 0.002)
+        if ok.sum() < 500:
+            continue
+        c = np.corrcoef(A[ok, 1], B[ok, 1])[0, 1]
+        if mejor is None or c > mejor[0]:
+            mejor = (c, A[ok], B[ok])
+    if mejor is None or mejor[0] < 0.9:
+        return None
+    M = np.linalg.lstsq(mejor[1], mejor[2], rcond=None)[0].T
+    neutro = np.linalg.solve(M, np.ones(3))
+    if np.any(neutro <= 0):
+        return None
+    return tuple(float(x) for x in neutro / neutro[1])
+
+
+def orientacion_jpg(ruta_raw):
+    """Orientación EXIF del JPG hermano (101O1970.RAW → 101_1970.JPG), 1 si no hay."""
+    d, n = os.path.split(ruta_raw)
+    for cand in (n[:3] + '_' + n[4:8] + '.JPG', n[:3] + '_' + n[4:8] + '.jpg'):
+        try:
+            from PIL import Image
+            return int(Image.open(os.path.join(d, cand)).getexif().get(0x0112, 1))
+        except Exception:
+            continue
+    return 1
+
+
 def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recorte=None,
-                 neutro=(0.5, 1.0, 0.7)):
+                 neutro=(0.5, 1.0, 0.7), orientacion=1, ccm=None):
     h, w = img.shape
     datos = img.astype('<u2').tobytes()
     entradas = []  # (tag, tipo, cuenta, valor_bytes)
@@ -266,10 +317,10 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
     def rac(x, d=10000):
         return (int(round(x * d)), d)
     cx, cy, cw, ch = recorte or (0, 0, w, h)
-    m = _matriz_color()
+    m = _matriz_color(ccm)
     tag(254, 4, [0]); tag(256, 4, [w]); tag(257, 4, [h]); tag(258, 3, [16]); tag(259, 3, [1])
     tag(262, 3, [32803]); tag(271, 2, 'Kodak'); tag(272, 2, 'EasyShare M531')
-    tag(273, 4, [0]); tag(274, 3, [1]); tag(277, 3, [1]); tag(278, 4, [h]); tag(279, 4, [len(datos)])
+    tag(273, 4, [0]); tag(274, 3, [orientacion]); tag(277, 3, [1]); tag(278, 4, [h]); tag(279, 4, [len(datos)])
     tag(284, 3, [1]); tag(305, 2, 'm531raw.py')
     tag(33421, 3, [2, 2]); tag(33422, 1, list(_CFA[cfa]))
     tag(50706, 1, [1, 4, 0, 0]); tag(50707, 1, [1, 1, 0, 0]); tag(50708, 2, 'Kodak EasyShare M531')
@@ -311,7 +362,19 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
 # ---------------------------------------------------------------- flujo
 # Formato medido en la cámara real (2026-11-11, fotos 1968/1969): 4320×3264, u16 little-endian,
 # 12 bits útiles, patrón con verdes en (0,0)/(1,1). Si el tamaño coincide, se usa directamente.
-PERFILES = {28_200_960: dict(packing='u16_le', ancho=4320)}
+PERFILES = {
+    28_200_960: dict(packing='u16_le', ancho=4320),            # modo de captura 3 (rompe el JPEG)
+    14_100_480: dict(packing='u8', ancho=4320, decodificar=True),  # modo normal: 8 bits comprimidos
+}
+# Patrón medido: GBRG (verdes en (0,0)/(1,1), azul en (0,1), rojo en (1,0)). La heurística "R es el más
+# oscuro" daba GRBG; el ajuste RAW↔JPG de las fotos 1970/1971 lo corrigió (matriz diagonal con GBRG).
+CFA_M531 = 'GBRG'
+# CCM ajustada con las fotos 1970/1971 (cámara balanceada → sRGB lineal, filas suman 1). Provisional:
+# dos escenas de interior; refinar con una carta de color.
+CCM_M531 = np.array([[1.43013, -0.34631, -0.08382], [-0.2075, 1.54443, -0.33693], [0.22245, -1.20159, 1.97913]])
+# Tabla del firmware (0x429c4c y copia en 0x42a24c, idéntica a la de la C713): código de 8 bits del RAW
+# → valor lineal de 10 bits. El negro ya viene restado (mínimo 0). Justo antes está la tabla inversa.
+DECODE_M531 = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79, 80, 81, 82, 83, 85, 86, 87, 88, 90, 91, 92, 94, 95, 96, 98, 99, 100, 102, 103, 105, 106, 108, 109, 111, 113, 114, 116, 118, 119, 121, 123, 125, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152, 154, 157, 159, 161, 164, 166, 168, 171, 173, 176, 178, 181, 183, 186, 189, 191, 194, 197, 200, 203, 206, 209, 212, 215, 218, 221, 224, 227, 231, 234, 237, 241, 244, 248, 251, 255, 259, 262, 266, 270, 274, 278, 282, 286, 290, 294, 298, 303, 307, 312, 316, 321, 325, 330, 335, 339, 344, 349, 354, 360, 365, 370, 375, 381, 386, 392, 397, 403, 409, 415, 421, 427, 433, 439, 446, 452, 459, 465, 472, 479, 486, 493, 500, 507, 514, 522, 529, 537, 545, 553, 560, 569, 577, 585, 594, 602, 611, 620, 629, 638, 647, 656, 666, 675, 685, 695, 705, 715, 725, 736, 746, 757, 768, 779, 790, 802, 813, 825, 837, 849, 861, 874, 886, 899, 912, 925, 939, 952, 966, 980, 994, 1008, 1023], dtype=np.uint16)
 
 
 def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, invertir=False):
@@ -319,6 +382,9 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
     perfil = PERFILES.get(len(datos[0])) if packing is None and ancho is None and len(datos) == 1 else None
     if perfil:
         packing, ancho = perfil['packing'], perfil['ancho']
+    decodificar = bool(perfil and perfil.get('decodificar'))
+    if perfil and cfa is None:
+        cfa = CFA_M531
     if invertir:
         datos = datos[::-1]
     if packing is None:
@@ -341,6 +407,8 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
                 raise SystemExit(f'no se pudo detectar el ancho para {packing}; pasar --width')
             ancho = c[0]['ancho']
     campos = [a_imagen(d, packing, ancho) for d in datos]
+    if decodificar:
+        campos = [DECODE_M531[c] for c in campos]
     img, layout_usado = combinar(campos, layout)
     if img.shape[0] % 2:
         img = img[:-1]
@@ -351,7 +419,7 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
                 cfa=cfa or cfa_det, cfa_detectado=cfa_det,
                 cfa_rb_provisional=cfa is None,  # R vs B sale de "el más oscuro es R"; confirmar con toma real
                 cfa_metricas={k: round(v, 5) for k, v in cfa_info.items()},
-                candidatos=cands[:5])
+                candidatos=cands[:5], decodificado=decodificar)
     return img, info
 
 
@@ -367,6 +435,8 @@ def main():
     ap.add_argument('--cfa', choices=list(_CFA))
     ap.add_argument('--black', type=int)
     ap.add_argument('--white', type=int)
+    ap.add_argument('--matriz', choices=['m531', 'c713'], default='m531',
+                    help='m531 = ajustada con fotos reales (provisional); c713 = la de la C713')
     ap.add_argument('--invertir-campos', action='store_true', help='el orden de los campos no se detecta; usar si los colores salen cambiados')
     a = ap.parse_args()
     if len(a.archivos) > 2:
@@ -375,7 +445,10 @@ def main():
     # Negro provisional: percentil bajo de la escena. Sobreestima si la escena no tiene negros puros;
     # el valor real sale del negro óptico de una toma real (o --black).
     negro = a.black if a.black is not None else int(np.percentile(img, 0.05))
-    if a.white is not None:
+    if info.get('decodificado'):
+        negro = a.black if a.black is not None else 0   # el firmware ya restó el negro
+        blanco = a.white if a.white is not None else 1023
+    elif a.white is not None:
         blanco = a.white
     elif info['bits'] == 16:
         # contenedor de 16 bits: el sensor da 12–14; usar los bits realmente ocupados
@@ -391,9 +464,15 @@ def main():
         return
     if not a.salida:
         sys.exit('falta -o SALIDA.dng')
-    neutro = neutro_mundo_gris(img, info['cfa'], negro, blanco)
+    neutro = neutro_desde_jpg(a.archivos[0], img, info['cfa']) if info.get('decodificado') else None
+    info['balance'] = 'jpg' if neutro else 'mundo_gris'
+    if neutro is None:
+        neutro = neutro_mundo_gris(img, info['cfa'], negro, blanco)
     info['neutro'] = [round(x, 4) for x in neutro]
-    escribir_dng(a.salida, img, info['cfa'], negro, blanco, neutro=neutro)
+    info['matriz'] = a.matriz
+    info['orientacion'] = orientacion_jpg(a.archivos[0])
+    escribir_dng(a.salida, img, info['cfa'], negro, blanco, neutro=neutro, orientacion=info['orientacion'],
+                 ccm=CCM_M531 if a.matriz == 'm531' else None)
     print(json.dumps(info, ensure_ascii=False))
 
 
