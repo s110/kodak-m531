@@ -2,7 +2,8 @@ Kit fase 1 para la SD de la Kodak M531 (no flashea nada; todo se revierte quitan
 
 Copiar TODO el contenido de esta carpeta a la RAÍZ de la SD de la Kodak (no dentro de otra carpeta).
 
-  HiddenMenu/              activa el menú oculto: Menu → Setup → About
+  HiddenMenu/              permite el menú oculto: Setup → Format → (confirmación) mantener DELETE + DERECHA
+                           ¡en esa pantalla OK formatea la tarjeta!
   ENABLE_NAND_TOOL         muestra la NAND Tool dentro del menú oculto
   DISABLE_AUTO_POWER_OFF   evita que se apague durante volcados y lecturas por USB
   Batch/BatchScripts.txt   lista de scripts que el firmware ejecuta al encender (hipótesis)

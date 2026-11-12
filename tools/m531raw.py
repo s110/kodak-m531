@@ -220,6 +220,23 @@ def detectar_cfa(img: np.ndarray):
     return ('RGGB' if o1 < o2 else 'BGGR'), dict(d_verde=d_secundaria, d_otra=d_principal)
 
 
+def neutro_parche_blanco(img, cfa, negro, blanco, pct=98):
+    """Balance por las zonas más claras sin saturar (2 % superior de luminancia). Más estable que el
+    mundo gris en escenas con un color dominante, si hay algo blanco o gris claro en la foto."""
+    v = img.astype(np.float64) - negro
+    pos = {c: [(i // 2, i % 2) for i, ch in enumerate(cfa) if ch == c] for c in 'RGB'}
+    ch = {c: np.mean([v[y::2, x::2] for y, x in pos[c]], axis=0) for c in 'RGB'}
+    R, G, B = ch['R'], ch['G'], ch['B']
+    tope = (blanco - negro) * 0.97
+    ok = (R < tope) & (G < tope) & (B < tope) & (G > 0)
+    L = R + G + B
+    if ok.sum() < 1000:
+        return None
+    sel = ok & (L >= np.percentile(L[ok], pct))
+    n = np.array([R[sel].mean(), G[sel].mean(), B[sel].mean()])
+    return tuple(float(x) for x in np.clip(n / n[1], 0.05, 4.0))
+
+
 def neutro_mundo_gris(img, cfa, negro, blanco):
     """AsShotNeutral por mundo gris: media de cada canal sin negro ni saturados, relativa a G."""
     pos = {c: [] for c in 'RGB'}
@@ -365,7 +382,10 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
 PERFILES = {
     28_200_960: dict(packing='u16_le', ancho=4320),            # modo de captura 3 (rompe el JPEG)
     14_100_480: dict(packing='u8', ancho=4320, decodificar=True),  # modo normal: 8 bits comprimidos
-    21_150_720: dict(bits=12, ancho=4320),  # modo 4: 12 bits empaquetado (orden de bits a detectar)
+    # modo 4: contenedor de 12 bits empaquetado (orden lsb medido), datos de 10 bits lineales con el negro
+    # ya restado (máximo 1020 en las fotos 1972–1974). El JPG de este modo sale con el color corrido:
+    # el balance no se toma de él.
+    21_150_720: dict(bits=12, ancho=4320, blanco=1023, negro=0, balance_jpg=False),
     17_625_600: dict(bits=10, ancho=4320),  # modo 2: 10 bits empaquetado
 }
 # Patrón medido: GBRG (verdes en (0,0)/(1,1), azul en (0,1), rojo en (1,0)). La heurística "R es el más
@@ -373,6 +393,9 @@ PERFILES = {
 CFA_M531 = 'GBRG'
 # CCM ajustada con las fotos 1970/1971 (cámara balanceada → sRGB lineal, filas suman 1). Provisional:
 # dos escenas de interior; refinar con una carta de color.
+# Balance fijo para modos cuyo JPG no sirve de referencia: media de los ajustes RAW↔JPG de 1970 y 1971
+# (interior, luz cálida). Provisional.
+NEUTRO_M531 = (0.7056, 1.0, 0.5292)
 CCM_M531 = np.array([[1.43013, -0.34631, -0.08382], [-0.2075, 1.54443, -0.33693], [0.22245, -1.20159, 1.97913]])
 # Tabla del firmware (0x429c4c y copia en 0x42a24c, idéntica a la de la C713): código de 8 bits del RAW
 # → valor lineal de 10 bits. El negro ya viene restado (mínimo 0). Justo antes está la tabla inversa.
@@ -389,6 +412,7 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
             cands = [c for c in detectar_formato(datos[0]) if c['bits'] == perfil['bits']]
             packing = cands[0]['packing'] if cands else f"p{perfil['bits']}_msb"
     decodificar = bool(perfil and perfil.get('decodificar'))
+    perfil_info = perfil or {}
     if perfil and cfa is None:
         cfa = CFA_M531
     if invertir:
@@ -425,7 +449,8 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
                 cfa=cfa or cfa_det, cfa_detectado=cfa_det,
                 cfa_rb_provisional=cfa is None,  # R vs B sale de "el más oscuro es R"; confirmar con toma real
                 cfa_metricas={k: round(v, 5) for k, v in cfa_info.items()},
-                candidatos=cands[:5], decodificado=decodificar)
+                candidatos=cands[:5], decodificado=decodificar,
+                perfil={k: v for k, v in perfil_info.items() if k in ('blanco', 'negro', 'balance_jpg')})
     return img, info
 
 
@@ -451,9 +476,13 @@ def main():
     # Negro provisional: percentil bajo de la escena. Sobreestima si la escena no tiene negros puros;
     # el valor real sale del negro óptico de una toma real (o --black).
     negro = a.black if a.black is not None else int(np.percentile(img, 0.05))
+    pf = info.get('perfil') or {}
     if info.get('decodificado'):
         negro = a.black if a.black is not None else 0   # el firmware ya restó el negro
         blanco = a.white if a.white is not None else 1023
+    elif 'blanco' in pf:
+        negro = a.black if a.black is not None else pf.get('negro', 0)
+        blanco = a.white if a.white is not None else pf['blanco']
     elif a.white is not None:
         blanco = a.white
     elif info['bits'] == 16:
@@ -470,10 +499,16 @@ def main():
         return
     if not a.salida:
         sys.exit('falta -o SALIDA.dng')
-    neutro = neutro_desde_jpg(a.archivos[0], img, info['cfa']) if info.get('decodificado') else None
-    info['balance'] = 'jpg' if neutro else 'mundo_gris'
-    if neutro is None:
-        neutro = neutro_mundo_gris(img, info['cfa'], negro, blanco)
+    usar_jpg = info.get('decodificado') and pf.get('balance_jpg', True)
+    neutro = neutro_desde_jpg(a.archivos[0], img, info['cfa']) if usar_jpg else None
+    if neutro:
+        info['balance'] = 'jpg'
+    elif pf.get('balance_jpg') is False:
+        neutro = neutro_parche_blanco(img, info['cfa'], negro, blanco)
+        info['balance'] = 'parche_blanco' if neutro else 'fijo_m531'
+        neutro = neutro or NEUTRO_M531
+    else:
+        neutro, info['balance'] = neutro_mundo_gris(img, info['cfa'], negro, blanco), 'mundo_gris'
     info['neutro'] = [round(x, 4) for x in neutro]
     info['matriz'] = a.matriz
     info['orientacion'] = orientacion_jpg(a.archivos[0])

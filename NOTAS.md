@@ -341,3 +341,32 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   registra el modo (esperado 4). El verificador admite ese destino con valores 0–4.
 - Conversor: perfiles 21.150.720 (12 b) y 17.625.600 (10 b) con orden de empaquetado detectado
   (probado con mosaicos sintéticos p12_msb y p12_lsb de 4320×3264).
+
+## FE DE ERRATAS (revisión de Fable, 2026-11-12) — prevalece sobre lo anterior
+
+Secciones anteriores que quedan superadas (no se reescriben para conservar el historial):
+- Menú oculto por "Setup → About" (y la carpeta sola): **incorrecto**. Es Setup → Format →
+  confirmación, mantener DELETE y pulsar DERECHA. En esa pantalla OK formatea.
+- `0x6615c` como lector de ajustes, "Sharpness = ajuste 0xA", "ajuste 0xF", P7/P7OFF y el plan de leer
+  `0x495a5c`: **incorrecto**. `0x6615c` es el estado de teclas (`KeyStateGet`).
+- "P1, P4 y P5 corrieron sin errores de sintaxis": sólo se **cargaron** (sin `RUN`). Lo confirmado
+  en la prueba 1 es el arranque automático y la creación de los `.LOG`.
+- Nombres de RAW: sólo se escribe `101O####.RAW` (un cuadro), no dos campos 'O'/'o'/'b'.
+- Patrón "GRBG, R/B correctos a ojo": **incorrecto**; es GBRG, verificado en 8 bits (1970/1971) y en
+  modo 4 (1972–1974, correlación de croma con el JPG −0,84 a −0,93). Para los RAW de 16 bits (modo 3)
+  sigue siendo extrapolación. Los DNG de `dump/raw1` se generaron con el patrón viejo.
+- Hipótesis "hace falta modo 3 para el RAW": **incorrecto** (bastaba la bandera; nada se ejecutaba).
+- "0x2bcdb8 llama a 0x2bd664": **incorrecto** — ver REVERSIBILIDAD (ruta 5-en-1 en `0x2bd024`).
+- "rec4–6 idiomas: coincide el idioma cargado": sin respaldo; ninguna suma coincide con la RAM.
+- La tabla `0x429c4c` como decodificación del RAW de 8 bits: correcta por resultado y por la C713,
+  pero sin traza de código que la use (punteros en `0x13aa70–0x13aa7c`, `0x4d1ef4`).
+- "El JPG lo rota la cámara (sensor de orientación)": sospecha; los JPG tienen EXIF orientación 1.
+
+## Modo 4 en cámara (2026-11-12, prueba 6 — P9)
+
+- `VERIFY: 4`. Tres fotos (1972–1974) **sin cuelgue**: RAW de 21.150.720 B (12 b empaquetado, orden
+  lsb) con **datos de 10 bits lineales, negro restado** (máx 1020) + JPG válido de ~2 MB pero con
+  **tinte rosado**; la revisión tras el disparo se ve como ruido morado (vista previa con formato
+  equivocado, como predijo Fable). Patrón GBRG verificado. El balance no se puede calibrar con estas
+  fotos: los canales llegan con otras ganancias que en el modo 0 y el JPG no sirve de referencia.
+  Siguiente: la misma escena en modo 0 y en modo 4 para medir la relación entre ambos.

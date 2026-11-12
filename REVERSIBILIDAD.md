@@ -13,11 +13,17 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 
 ## Nivel 1: archivos en la SD
 
-- El firmware sólo lee: carpeta `\HiddenMenu`, archivos vacíos `ENABLE_NAND_TOOL`,
-  `DISABLE_AUTO_POWER_OFF`, y `\Batch\BatchScripts.txt` + `*.srt`.
+- El **kit** sólo usa: carpeta `\HiddenMenu`, archivos vacíos `ENABLE_NAND_TOOL`,
+  `DISABLE_AUTO_POWER_OFF`, y `\Batch\BatchScripts.txt` + `*.srt`. El firmware reacciona además a
+  `B:\SYSTEM\KM531.FW`, `B:\SYSTEM\IMAGE.ISO`, `B:\TBM_HD14P.BIN`, `B:\TBIB_HD14P.BIN`,
+  `ALLOW_ERASE_BOOT`, `ALLOW_ROLLBACK_OLD_PARTITION`, `RESET_DEFAULT_LCD_TYPE`, `STR_EN`: ninguno
+  va en la SD.
+- **Ojo con el menú oculto:** se entra desde la pantalla de confirmación de formateo; ahí **OK
+  formatea la tarjeta**. Con `ENABLE_NAND_TOOL`, las opciones destructivas (J1, H1/H2, B1, C2)
+  quedan a pocas teclas: entrar sólo con un objetivo concreto.
 - Peor caso: un script con un error. **Cualquier error de script detiene la CPU** (`0x4b4e0`): la
   cámara se congela en cada arranque con esa SD. Arreglo: sacar batería y SD, borrar o corregir
-  `\Batch` en el Mac. Nada queda escrito en la NAND. Mitigación: verificador estricto y pruebas
+  `\Batch` en el Mac. Que nada quede escrito en la NAND no está auditado (comparar E1 antes/después). Mitigación: verificador estricto y pruebas
   nuevas siempre con un script mínimo primero. Por eso **nunca** se ponen scripts en la memoria interna (A:).
 - Lista negra de funciones que ningún script nuestro llama: `Format`, `UpdateFW`, `UpdateCDROMImage`,
   `InfoMgr_*` (escriben calibración), `WriteClampAndOffsetToFlash`, `ToneCCM_WriteLCDTable2Nflash`,
@@ -58,18 +64,23 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
 
 ### Correcciones tras la revisión externa (2026-11-11)
 
-- **El actualizador tiene una segunda vía que escribe la partición 0.** Si el `.FW` contiene el
-  marcador `INFO` + `0x55aaaa55`, `0x2bcdb8` llama a `0x2bd664` (validador propio `0x2bd510`,
-  relee con `0x1436fc` + memcmp), que escribe la partición 0 y después la 6. También la usa
-  `0x2bcf28` (actualizador del boot, llamado desde `0x24cc38`, `0x24cdca`, `0x2c1af4`; probablemente
-  lee `TBIB_HD14P.BIN`). `km531fw.py` rechaza cualquier imagen con ese marcador; ningún archivo
+- **Hay una segunda vía que escribe la partición 0** (corregido tras la revisión de Fable):
+  la rutina simple `0x2bcdb8` (opción UPDATE FIRMWARE, pantalla `0x1f2c00`) sólo llama a `0x2bd5bc`
+  (partición 6). La que busca el marcador `INFO` + `0x55aaaa55` es **`0x2bd024`** (llamada desde
+  `0x1f93ba`, pantalla `0x1f9000`): sólo lo busca en contenedores que **no** empiezan por `RHIR`; si
+  lo encuentra, `0x2bd664` escribe la partición 0 y luego `0x2bd5bc` la 6. El actualizador del boot
+  `0x2bcf28` usa `B:\TBIB_HD14P.BIN` y lo llaman `0x24cc38`, `0x24cdca`, `0x2c1af4`, el comando de
+  script `UpdateFW` (`0x2d81e6`) y `NANDScriptEx_ExecuteCmd` (`0x2da67c`, `0x2da81c`).
+  Reglas: todo `.FW` propio empieza por `RHIR`; `km531fw.py` rechaza el marcador; ningún
   `TBIB_*.BIN` ni `TBM_*.BIN` va nunca a la SD.
 - **Zonas intocables** ampliadas a las funciones de las que depende la vía de vuelta (modelo
   `0x4c1c0`, tamaño de partición `0x6584c`, NAND `0x1433c0/0x1436fc/0x143a90/0x1447a0/0x657b8`,
   memcmp `0x3019c8`, pool `0x7574c`, archivos `0xe0c00–0xe1000`). Pendiente: derivarlas del grafo de
   llamadas completo en vez de una lista a mano.
-- **Registro 7 (tipo 2)**: sector 46144 (desplazamiento 0x1688000), 0x800 B, contenido desconocido.
-  Antes del nivel 3, ver en `MainCode.dmp`/`NANDP1.dmp` qué hay ahí y si el escritor lo pisa.
+- **Registro 7 (tipo 2)**: el sector 46144 no es un desplazamiento del `.FW` (corregido): es el
+  bloque absoluto 1442 de la NAND, fuera de las 7 particiones (terminan en el bloque 710). La
+  partición 6 ocupa los bloques 195–695 = **0x7d0000 B** (tabla en RAM `0x4da228`, bloques de 16 KiB)
+  y `0x1445d0` limita la escritura a ese tamaño. Falta saber quién usa el bloque 1442 (G1/F1).
 - **Ajustes guardados en la NAND (riesgo 1 del nivel 2)**: volcar E1 `CameraParam.dmp` antes de
   correr scripts y otra vez después de una sesión con scripts; comparar. Confirmar también si
   SaveCCDRawOnTake del menú DEBUG queda guardado y cómo se apaga.
@@ -81,6 +92,13 @@ ya funcionó en el anterior. Un nivel sólo se usa si su vía de vuelta está co
   código que el validador corre antes de escribir en `0x2bd5bc`; falta revisar el resto de la ruta.
 - **Tamaño de la partición 6**: sacarlo de D1 `NANDPartition.txt` y pasarlo siempre con
   `km531fw.py patch … --particion=TAMAÑO`.
+
+- **Límite de "probar antes en RAM":** no cubre código que corre antes del lanzador de scripts
+  (`0x1fe1dc`) ni la sección de datos (`rec1`). Los parches de nivel 3 se limitan a funciones que se
+  ejecutan después del arranque y que ya funcionaron como parche en RAM.
+- **Escritura en sitio:** `0x2bd5bc` escribe la partición 6 sin copia de respaldo; un corte de
+  energía la deja a medias. Batería llena, cámara fuera de USB.
+- **Primer flasheo = stock idéntico** (desde B3), para probar el camino completo sin cambios.
 
 ## Nivel 4: nunca
 

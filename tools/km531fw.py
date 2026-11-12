@@ -49,6 +49,19 @@ ZONAS_INTOCABLES = sorted([
     (0x3019c8, 0x301a00, 'memcmp de verificación'),
     (0x7574c, 0x75780, 'pool de memoria del actualizador'),
     (0xe0c00, 0xe1000, 'acceso a archivos (FAT) del actualizador'),
+    # revisión de Fable (2026-11-12): vía de vuelta completa
+    (0x23bcf0, 0x23bd60, 'entrada al menú oculto'),
+    (0x1f2c00, 0x1f2c90, 'pantalla UPDATE FIRMWARE'),
+    (0x6615c, 0x66190, 'estado de teclas'),
+    (0xe1f5c, 0xe1fc0, 'apertura de pantallas'),
+    (0x24cc00, 0x24ce00, 'NAND Tool'),
+    (0x2c0000, 0x2c3000, 'NAND Tool'),
+    (0x1445d0, 0x144700, 'escritura de NAND (interna)'),
+    (0x143eb8, 0x144080, 'NAND (interna)'),
+    (0x14335c, 0x1433c0, 'NAND (interna)'),
+    (0x12e2e4, 0x12ec00, 'tabla de particiones'),
+    (0x2bd024, 0x2bd2bc, 'actualizador con contenedor 5-en-1'),
+    (0x2bcf28, 0x2bd024, 'actualizador del boot'),
 ])
 MARCADOR_5EN1 = b'INFO' + bytes.fromhex('55aaaa55')
 
