@@ -1000,6 +1000,11 @@ Procedimiento y registros esperados: `sd_kit/PASOS.md`, paso 7.
 
 ## 2026-11-12 — La revisión tras el disparo: qué la produce, qué quedó descartado, y M4R medido
 
+> **Fe de erratas (misma fecha, sección "Revisión en modo ≠ 0: causa leída").** Los puntos 1 a 3 de
+> "Leído en el código" describen el gancho de **detección de caras** de la foto (`0xf0d14`), no la
+> revisión. La imagen que se ve tras el disparo la genera `0x148b78` directamente desde el RAW. Las
+> mediciones de esta sección siguen siendo válidas.
+
 Análisis estático (`work/code_full.s`, Ghidra, `dump/ram_snapshot.bin`) más las fotos de `dump/raw13`
 y `dump/raw14`. **La causa del ruido de la revisión sigue sin identificar.** Por eso no existe `M4Q`:
 un parche de código sin causa leída es una apuesta, y un error en un script detiene la CPU.
@@ -1201,6 +1206,21 @@ Procedimiento: `sd_kit/PASOS.md`, paso 8.
 
 ## 2026-11-12 — Revisión con ruido en modo ≠ 0: el candidato `ctx+8` queda descartado; sin M4Q
 
+> **Fe de erratas (misma fecha, sección siguiente).** Tres cosas de esta sección quedan corregidas:
+> 1. *Los pools están mal identificados.* `0x4b980(n)` traduce un número lógico al identificador del
+>    pool; esta sección tomó el argumento por el identificador. Lo correcto: `0x4b980(0x22)` → pool
+>    `0x40` (`0x0212d800`, tres cabeceras de `0x5800` B); `0x4b980(0x25)` → pool `0x44` (`0x020bd000`,
+>    640×480×1,5: es `ctx+8`, **la imagen de revisión**); `0x4b980(0x26)` → pool `0x45` (`0x005afc00`,
+>    640×480); `0x4b980(0x13)` → pool `0x33` (`0x03d98400`). La conclusión del punto 1 se mantiene:
+>    `ctx+8` no depende del modo.
+> 2. *`0xf0d14`, `0xf0e7c`, `0xf117c`, `0xf0ad8`, `0xdc7ec` y `0xdc9d4` son la detección y el
+>    reconocimiento de caras de la foto* (marcas de tiempo `Still FD Start/End`, `Still FR Start/End`;
+>    `0xea7a0` escribe las etiquetas de caras), y sólo corren si `0x1bb744() ≠ 0`. Que esos búferes no
+>    dependan del modo es cierto y no dice nada de la revisión.
+> 3. *La hipótesis del RAW que pisa otros pools queda descartada.* La revisión no usa ninguno de esos
+>    pools; lee el RAW con el formato equivocado. `0x1b0ab6` (lector del modo) es la salida de la
+>    pantalla de revisión, no el guardado.
+
 Análisis estático (`work/code_full.s`, Ghidra con `-noanalysis`, `dump/ram_snapshot.bin`). Sin cámara.
 **La causa sigue sin identificar y no hay `M4Q`**: ninguna escritura de RAM se puede justificar con lo
 leído. Lo nuevo es que el camino de una foto normal no pasa por el puntero que era el candidato principal.
@@ -1262,3 +1282,104 @@ demás pools.
 
 **Siguiente prueba en la cámara** (`sd_kit/PASOS.md`, 7e): primero 8c (M4L + ORI, ya preparada); después
 M2V si 8c sale con ruido.
+
+## 2026-11-12 — Revisión en modo ≠ 0: causa leída en el código (formato del RAW fijo en 0) y script M4Q
+
+Análisis estático (`work/code_full.s`, Ghidra `-noanalysis`, `dump/ram_snapshot.bin`,
+`firmware/stock`). Sin cámara. **M4Q no corrió todavía en la cámara.**
+
+**Causa (leída en el código)**
+1. *Quién dibuja la revisión.* El disparo termina con el evento `0x7ce2` (`0x12923c` → `0x5ef00`). La
+   tabla del estado `CaptureImage` (`0x460ffc`) lo lleva a `0x1e4e8c`, que deja programada
+   `0x1e5190` (`0x1e55a0` → `0x545c4`). En la foto normal ésta llama a `0x1e53ac`, que llama, en
+   este orden, a `0x127754(ctx)` (estadística de balance sobre el RAW), a `0x148b78(ctx, 0xff)`
+   (genera la imagen de revisión en `ctx+8`; en ráfaga `0x1e5190` la llama con 1) y a
+   `0x164ed4(0, 0, ctx+8, pantalla, ctx+0x60, ctx+0x62, …)`, que la copia al búfer de pantalla
+   (`0xd54f0`, pool 7). `0x1b0b40` caso 6 repite esa copia. Si `0x148b78` devuelve error, la pantalla
+   se rellena con ceros.
+2. *De dónde sale la imagen.* `0x148b78` llama a `0x25239c(formato, RAW, ancho, alto, destino, 640,
+   480, 1, …)`: una pasada del IRP con entrada desde memoria que lee **el búfer del RAW** (`ctx+4`) y
+   escribe 640×480 (480×360 si la foto va girada). El archivo RAW y el JPG no intervienen.
+3. *El formato está fijo.* `0x25239c` es general: su primer argumento es el formato del RAW con la misma
+   numeración que el modo de captura (0 = 8 bits, 2 = 10 bits empaquetados, 4 = 12 bits empaquetados,
+   1/3/5 = 16 bits). Con él calcula bytes por línea (`0xf65f4` → `0x186848`: código 2 ×1, 7 ×10/8,
+   9 ×12/8, 3/8/4 ×2) y programa el formato de entrada (`0x17aaf4`, registro `0x0ff10200`). Su única
+   llamada en todo el firmware está en `0x148ee8` y pasa `r16`, que vale 0 desde `0x148b94`
+   (`mov_s r16,r15` con `r15 = 0`). **La revisión lee siempre el RAW como 8 bits.** En modo 4 el búfer
+   lleva 12 bits empaquetados (1,5 B por píxel): cada tres bytes hay dos píxeles y el IRP toma tres, la
+   fase del mosaico cambia de byte en byte y sale ruido de color. Lo mismo en modo 2 y en modo 3.
+4. *La numeración coincide con el modo de captura.* En el arranque de la vista en vivo (`0xdbb94`) el
+   mismo registro `r17` va a `0x17ace8` (formato del DMA del sensor) y a `0x17aaf4`; la captura
+   (`0xe3cd4`) llama a `0x17ace8` con el modo de captura (`struct+4` = `0x6e0d0()`).
+
+Esto explica todas las observaciones: ruido con cualquier modo ≠ 0 y bien en modo 0; vista en vivo
+bien (otro camino); JPG y miniaturas bien (el procesado usa `0x128344`); igual sin SaveCFAonTake (M4N),
+porque el sensor llena el búfer del RAW en todos los casos y la revisión lee el búfer, no el archivo;
+igual en horizontal y en vertical (la orientación sólo cambia el destino); más rápida en M4N porque el
+evento `0x7ce2` llega al volver de la captura, después de escribir el RAW.
+
+**Hallazgo aparte, sin tocar.** La estadística de balance por foto (`0x127754` → `0x86d14` →
+`0x147b14(0, RAW, …)`) tiene el mismo defecto: formato 0 fijo. Es la razón de código de que el AWB no
+se calcule en modo 4 (sección "Balance de blancos por foto en modo 4"). No se corrige aquí: su ventana
+se coloca con desplazamientos en bytes de 8 bits (`fila·ancho`), que en 12 bits caen a mitad de línea,
+y su resultado entra en el JPG.
+
+**M4Q** (`sd_kit/fase1/Batch/M4Q.srt`, lista `BatchScripts_M4LQ.txt` = M4L, M4Q). Dos palabras de 16
+bits en RAM, contiguas, en la preparación de la llamada:
+
+| Dirección | De fábrica | M4Q | Efecto |
+|---|---|---|---|
+| `0x148ed6` | `0xc044` `st_s r0,[sp,0x10]` | `0xc744` `st_s r15,[sp,0x10]` | recorte nulo: cuadro completo |
+| `0x148ed8` | `0x700a` `mov_s r0,r16` | `0xd804` `mov_s r0,0x4` | formato 4: 12 bits empaquetados |
+
+Guardias: modo de captura = 4 (`0x3d97a8`), las dos palabras iguales a las de fábrica antes de la
+primera escritura, relectura y registro de cada una, y ocho lecturas a 64 KB para desalojar la línea
+de la caché de datos. Orden: primero el recorte (inocuo con formato 0), después el formato.
+
+*Por qué hace falta el recorte nulo.* Con el recorte de fábrica (x 4, y 24, 4300×3216) la rama del
+recorte de `0x25239c` coloca el origen en bytes de 8 bits y pasa el ancho 4300 a `0xf65f4`. En 12 bits
+son 6450 B, que no es múltiplo de 4: en ráfaga (escala 3) `0xf65f4` devuelve error y `0x25239c` sale
+sin deshacer `0xe2fb4(1)` / `0xe2f5c(1)`. Con el puntero nulo y zoom digital 100 la misma rama toma
+origen 0 y el cuadro entero (4320×3264), y todos los tamaños son múltiplos de 4.
+
+**Demostrado por código**
+- *RAW.* `0x1b066c` lo escribe dentro de la captura, antes del evento `0x7ce2`. `0x148b78` sólo lee
+  ese búfer. Con M4Q la lectura abarca 816 × 25.920 B (escala 2, foto normal) o 1088 × 19.440 B
+  (escala 3, ráfaga) = 21.150.720 B: exactamente el RAW del modo 4, dentro del pool 8.
+- *Otros pools.* El destino y su tamaño no cambian: `0xf58e4` / `0xf5b64` reciben los mismos 640×480 o
+  480×360, y `0xf1764` programa el escalador con esas dimensiones de salida.
+- *Sin camino de error.* Origen `0x0213e000` (múltiplo de 4); escala 2: 12.960 B leídos y 12.960
+  saltados; escala 3: 6480 y 12.960; `0xf1e48(4320, …)` cae en el mismo preescalado que con 4300
+  (umbral `0x10f3` = 4339). `r15` vale 0 en `0x148ed6`: sus tres escrituras intermedias (`0x148c56`,
+  `0x148ce4`, `0x148df2`) salen a `0x148f3c` si el resultado no es 0, y ningún salto entra entre
+  `0x148ea0` y `0x148ee8`.
+- *JPG.* El registro `0x0ff10200` sólo se toca desde el módulo `0x17a…`; el formato (bits 2, 3 y 9)
+  sólo lo escribe `0x17aaf4`, y sus cuatro llamadores (vista en vivo `0xdbe48`, estadística `0x147bac`,
+  `0x1479ee`, revisión `0x2525bc`) lo fijan antes de cada pasada. El procesado de la foto no llama a
+  `0x17aaf4` ni habilita ese módulo (`0x17aa08`), y `0x25239c` lo deja deshabilitado al salir
+  (`0x17aa24`).
+
+**Inferido, sin prueba en la cámara**
+- Que el IRP con entrada de memoria en formato 4 desempaquete igual que el DMA del sensor en modo 4
+  (misma numeración, mismo hardware; ese camino con formato ≠ 0 nunca corrió).
+- El tono de la revisión: la tabla de módulos de la revisión (`0x122944`) es la del RAW de 8 bits con
+  curva; con 12 bits lineales la imagen puede verse más oscura o con dominante cálida (el AWB del modo
+  4 sigue en su valor por omisión). Es una imagen reconocible, sin ruido.
+- La rama nula con el cuadro completo no la usa el firmware de fábrica (siempre pasa recorte); comparte
+  todo el código con la rama del recorte desde `0x25240e`.
+
+**Riesgo que queda**
+- Zoom digital ≠ 100 con M4Q: `0x25239c` toma la rama `0x2524e8`, que sí calcula todo según el formato
+  (`0xf1ae0` alinea a 8 píxeles en formato 4) y que el firmware de fábrica tampoco ejecuta. Probar M4Q
+  sin zoom digital.
+- Modo 0 con M4Q cargado: la revisión leería 8 bits como 12 (ruido; lectura dentro del pool 8). M4Q
+  sólo escribe con el modo en 4; para volver al modo 0, apagar.
+- Si la primera foto muestra ruido y las siguientes salen bien, corrió la instrucción vieja desde la
+  caché de instrucciones (mismo efecto anotado para M4L).
+
+**Prueba E2E.** `tools/e2e_scripts.py`, 47 casos. Nuevos: el sitio del parche contra el firmware de
+fábrica (palabras de `0x148b78` y `0x25239c`, y barrido de todo el código: una sola referencia a
+`0x25239c`); M4Q ejecutado entero sobre el firmware como memoria en cinco estados (modo 4 de fábrica,
+modo 0, cada palabra ajena, ya aplicado) con un control de valor cambiado; y el juego M4L + M4Q armado
+como va a la SD. Pasos en la cámara: `sd_kit/PASOS.md`, paso 9.
+

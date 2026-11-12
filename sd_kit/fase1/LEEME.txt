@@ -21,6 +21,9 @@ Copiar TODO el contenido de esta carpeta a la RAÍZ de la SD de la Kodak (no den
                            M4L = modo 4 con 12 bits lineales (cambia una instrucción en RAM y estrena
                            peek16/poke16); M2V = modo 2 de reserva. Cada uno se prueba solo, con su
                            BatchScripts_<nombre>.txt: ver ../PASOS.md, paso 7, y NOTAS.md.
+  Batch/M4Q.srt            EXPERIMENTAL, sin probar: revisión tras el disparo correcta en modo 4
+                           (dos palabras de código en RAM, con guardia y relectura). Va DESPUÉS de
+                           M4L, con BatchScripts_M4LQ.txt: ver ../PASOS.md, paso 9, y NOTAS.md.
 
 Copiar con: cp -X (sin metadatos de macOS) y luego dot_clean en la SD.
 

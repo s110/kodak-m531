@@ -132,7 +132,7 @@ Sólo si 7b no da un JPG correcto.
 4. JPG de 224 B o cuelgue: el modo 2 no es utilizable; batería y SD fuera, traer la SD.
 
 ### 7d — Diagnóstico de la revisión con ruido (M4L y M4R ya probados: JPG y RAW correctos, revisión con ruido)
-No hay script de arreglo (`M4Q`): la causa no está leída en el código (ver `../NOTAS.md`, última sección).
+Cuando se hicieron no había script de arreglo. Hoy la causa está leída en el código y existe `M4Q`: paso 9.
 Estas tres pruebas la acotan. Antes: `python3 -I tools/e2e_scripts.py` (32 casos). Quickview en **On**.
 1. **Orientación, con M4L tal como está en la SD.** Encender, esperar "Script / Run…". Foto 1 con la
    cámara **horizontal**; mirar la revisión. Foto 2 en vertical; mirar la revisión. Anotar cuál sale
@@ -149,9 +149,10 @@ Estas tres pruebas la acotan. Antes: `python3 -I tools/e2e_scripts.py` (32 casos
 5. Los RAW de M4L/M4R se convierten ya sin parámetros: `tools/m531raw.py dng 101O####.RAW -o salida.dng`
    (`"modo4": "lineal12"`, blanco 4095).
 
-### 7e — Siguiente prueba de la revisión (sin script nuevo; no hay `M4Q`)
-Análisis: `../NOTAS.md`, sección "el candidato `ctx+8` queda descartado". La causa no está leída y ningún
-parche de RAM se puede justificar. Las dos pruebas usan scripts que ya están en el kit.
+### 7e — (sustituido por el paso 9) Pruebas previas a conocer la causa
+La causa de la revisión con ruido ya está leída en el código y existe `M4Q`: ver el **paso 9**. Lo que
+sigue queda como referencia. Con la causa conocida, 8c (M4L + ORI) y M2V darían ruido igual: la
+revisión lee el RAW como 8 bits en cualquier orientación y en cualquier modo ≠ 0.
 1. **8c (M4L + ORI)**, tal como está en el paso 8. Es la prueba con más información: todas las revisiones
    de modo 4 pasaron por la rama con giro de `0xf117c`; la rama sin giro usa otro origen y otro formato.
    Una foto horizontal nivelada y otra en picado. Anotar cómo sale la revisión de cada una.
@@ -207,6 +208,43 @@ En `Batch/` sólo `M4L.srt`, `ORI.srt` y `BatchScripts.txt` (copia de `fase1/Bat
 12 bits. Anotar cómo sale la revisión: hasta ahora todas las revisiones de modo 4 pasaron por la rama con giro.
 
 Para deshacer ORI: apagar. El ajuste "Sensor de orientación" del menú queda como estaba.
+
+## Paso 9 — M4Q: revisión correcta en modo 4 (M4L + M4Q, sólo RAM)
+Análisis: `../NOTAS.md`, sección "Revisión en modo ≠ 0: causa leída en el código". La revisión la genera
+`0x148b78` leyendo el búfer del RAW con el formato fijo en 0 (8 bits). M4Q cambia dos palabras de 16 bits
+de esa llamada: formato 4 y cuadro completo. No corrió todavía en la cámara.
+Antes: `python3 -I tools/e2e_scripts.py` (47 casos). Quickview en **On**. **Zoom digital sin usar.**
+
+1. Claude deja en `Batch/` de la SD tres archivos de `fase1/Batch`: `M4L.srt`, `M4Q.srt` y
+   `BatchScripts.txt` (copia de `BatchScripts_M4LQ.txt`: M4L, M4Q, en ese orden). Preparación como en
+   6.1: borrar `.LOG` y `.srt` anteriores, `cp -X`, `dot_clean`, verificador sobre la SD (`OK`), hashes
+   contra el kit. Batería fuera unos segundos antes de encender.
+2. Encender y esperar "Script / Run…". No disparar antes de que termine.
+3. Tres fotos sin zoom digital, esperando el guardado de cada una y mirando la revisión: horizontal
+   nivelada, horizontal en picado y vertical. Después, opcional, una ráfaga corta.
+4. Esperado en los `.LOG`:
+   - `M4L.LOG`: `VERIFY: 8`, `30757`, `3`, `28712`, `4`.
+   - `M4Q.LOG`: `VERIFY: 4`, `49220`, `28682`, `51012`, `55300`.
+5. Esperado en las fotos: **revisión con la escena reconocible, sin ruido** (puede verse más oscura o
+   más cálida que en modo 0, y muestra el cuadro completo del sensor); JPG correcto; `101O####.RAW` de
+   21.150.720 B lineal de 12 bits, como con M4L solo.
+6. Cómo leer un resultado distinto:
+   - `M4Q.LOG` con sólo `0` (u otro número ≠ 4): M4L no dejó el modo 4; mirar `M4L.LOG`. M4Q no escribió.
+   - `M4Q.LOG` = `4` y un número ≠ 49220, o `4`, `49220` y un número ≠ 28682: el código de la cámara no
+     es el del volcado en ese punto. M4Q no escribió nada. Anotar los números.
+   - `M4Q.LOG` = `4`, `49220`, `28682`, `51012` y un quinto número ≠ 55300: quedó sólo el recorte nulo
+     (inocuo); la revisión sale con ruido como antes. Anotar el número.
+   - Log completo, primera revisión con ruido y las siguientes bien: la primera corrió con la
+     instrucción vieja en caché. Anotarlo; el arreglo funciona.
+   - Log completo y todas las revisiones con ruido: el IRP no desempaqueta el formato 4 por esta
+     entrada. Guardar la SD tal cual; el JPG y el RAW deben seguir correctos.
+   - Log completo y revisión negra o verde lisa: `0x148b78` devolvió error. Guardar la SD tal cual.
+   - Cámara congelada tras un disparo: batería y SD fuera; nada queda escrito en la cámara. Quitar
+     `M4Q` de `BatchScripts.txt`.
+7. No usar el modo 0 con M4Q cargado: apagar primero.
+
+Al terminar, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS` y comprueba JPG y RAW con
+`tools/e2e_raw.py`.
 
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los

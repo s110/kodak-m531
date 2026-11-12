@@ -45,6 +45,22 @@ Cómo puede fallar el verificador (escrito antes del código; cada punto es un c
       firmware puede dejar (0x0101, 0x0100) y con seis que no debería tocar.
   F15. El juego de prueba de ORI (P8 + EET + EETV + ORI, y M4L + ORI) no pasa el verificador, su
       lista nombra otra cosa, o las dos copias de ORI.srt (fase1 y fase3) difieren.
+  F16. M4Q (revisión tras el disparo en modo 4) cambia instrucciones que no son las que arman la
+      llamada al conversor RAW → imagen de revisión. Se coteja con el firmware de fábrica, no con
+      los números del script: `0x148b78` pone r15 = 0 y r16 = r15 al entrar; en `0x148ed6` guarda
+      el puntero del recorte en `[sp+0x10]` y en `0x148ed8` pasa r16 (0 = RAW de 8 bits) como
+      formato; `0x148ee8` es `bl 0x25239c` y es la ÚNICA referencia a `0x25239c` en todo el código
+      (barrido de `bl`, `b` y punteros, posición par por posición par); `0x25239c` lee esos argumentos en `[sp+140]`, `[sp+144]`
+      y `[sp+148]` tras bajar la pila 0x4c + 0x38. Los valores nuevos deben ser exactamente
+      `st_s r15,[sp,0x10]` (recorte nulo) y `mov_s r0,4` (12 bits empaquetados).
+  F17. M4Q escribe con el modo de captura distinto de 4, con una de las dos palabras distinta de
+      la de fábrica (en la cámara: firmware distinto del volcado, o script ya aplicado), deja
+      aplicada sólo la segunda palabra (formato 4 con el recorte de fábrica: en ráfaga el ancho
+      4300 px no da bytes múltiplos de 4 y `0xf65f4` sale por un camino de error que nunca corrió),
+      no relee, o cambia otros bytes. Se ejecuta entero sobre el firmware de fábrica como memoria,
+      en cinco estados iniciales, y un control con el valor escrito cambiado.
+  F18. El juego M4L + M4Q, armado como va a la SD, no pasa el verificador, la lista nombra otra
+      cosa o está en otro orden (M4Q antes de M4L encuentra el modo 0 y termina sin escribir).
 
 Corre la CLI de verdad sobre carpetas armadas en work/e2e_scripts/. Artefacto:
 work/e2e_scripts/reporte.json (veredicto por caso, salida de la CLI y SHA-256 de cada script).
@@ -82,6 +98,37 @@ PARCHES = {
     'M4R': {0x122780: ('codigo', 0x7825, 0x7028), 0x122781: ('codigo', 0x7825, 0x7028)},
     'M4N': {0x122780: ('codigo', 0x7825, 0x7028), 0x122781: ('codigo', 0x7825, 0x7028)},
 }
+# M4Q: llamada de la revisión al conversor RAW -> YUV (0x148b78 -> 0x25239c), leída en el
+# desensamblado. Palabras de 16 bits (LE) del firmware de fábrica que sostienen el parche.
+M4Q_MODO = 0x3d97a8
+M4Q_RECORTE, M4Q_FORMATO, M4Q_LLAMADA, M4Q_CONVERSOR = 0x148ed6, 0x148ed8, 0x148ee8, 0x25239c
+M4Q_FABRICA = {
+    0x148b8e: 0xdf00,                    # mov_s r15,0
+    0x148b94: 0x771a,                    # mov_s r16,r15
+    # los tres resultados que pasan por r15 salen a 0x148f3c si no son 0: en 0x148ed6 r15 vale 0
+    0x148c56: 0x270a, 0x148c58: 0x9000,  # mov.f r15,r0
+    0x148ce4: 0x270a, 0x148ce6: 0x9000,
+    0x148df2: 0x270a, 0x148df4: 0x9000,
+    M4Q_RECORTE: 0xc044,                 # st_s r0,[sp,0x10]  (puntero del recorte)
+    M4Q_FORMATO: 0x700a,                 # mov_s r0,r16       (formato del RAW = 0)
+    0x148eda: 0x8621,                    # ld_s r1,[r14,0x4]  (RAW = ctx+4)
+    0x148edc: 0x135a, 0x148ede: 0xb602,  # ld.as r2,[fp,-166] (ancho)
+    0x148ee0: 0x260a, 0x148ee2: 0x0640,  # mov r6,r25
+    0x148ee4: 0x274a, 0x148ee6: 0x0040,  # mov r7,1
+    0x2523a2: 0xc1b3,                    # sub_s sp,sp,0x4c (tras guardar 0x38 B)
+    0x2523a4: 0x705a,                    # mov_s r18,r0     (formato)
+    0x2523c0: 0x148c, 0x2523c2: 0x3080,  # ldb r0,[sp,140]  (escala)
+    0x2523d2: 0x1490, 0x2523d4: 0x3101,  # ldh r1,[sp,144]  (zoom)
+    0x2523e2: 0x1494, 0x2523e4: 0x3000,  # ld r0,[sp,148]   (recorte)
+}
+# El barrido decodifica cada posición par: 0x2b1b7e es la segunda mitad de `b.d 0x2b219a`
+# (0x061f 0x0020 en 0x2b1b7c, instrucción de 4 bytes) y leída como comienzo de instrucción da un
+# salto a 0x25239c. No es una referencia.
+M4Q_MITAD_DE_INSTRUCCION = {0x2b1b7e: (0x2b1b7c, 0x061f, 0x0020)}
+M4Q_NUEVO = {M4Q_RECORTE: 0xc744,        # st_s r15,[sp,0x10]
+             M4Q_FORMATO: 0xd804}        # mov_s r0,0x4
+PARCHES_ENCADENADOS = {'M4Q': {0x148ed7: ('codigo', 0xc044, 0xc744), 0x148ed8: ('codigo', 0x700a, 0xd804),
+                               0x148ed9: ('codigo', 0x700a, 0xd804)}}
 TABLAS = {'FOREIGN': 0x486334, 'SYSTEM': 0x4871f4, 'DEBUGGING': 0x487404}
 TIPOS = {0: 'int', 1: 'float', 2: 'str', 6: 'void'}
 # ORI: compuerta del sensor de orientación, leída en el desensamblado de 0xf02a0. El literal de
@@ -209,7 +256,7 @@ def revisar_parches(nombre, crudo=None):
             viejo, nuevo = guardia >> 8 * i & 0xff, valor >> 8 * i & 0xff
             if viejo != nuevo:
                 tocados[direccion + i] = nuevo
-    previstos = PARCHES[nombre]
+    previstos = {**PARCHES, **PARCHES_ENCADENADOS}[nombre]
     if set(tocados) != set(previstos):
         problemas.append(f'bytes cambiados {sorted(map(hex, tocados))}, previstos {sorted(map(hex, previstos))}')
     for direccion, nuevo in tocados.items():
@@ -303,6 +350,91 @@ def revisar_ori(crudo, direccion):
     return not problemas, f'{len(ORI_ESTADOS)} estados con escritura y {len(ORI_AJENOS)} sin ella; problemas: {problemas}'
 
 
+class MemoriaDeFabrica(dict):
+    """Memoria para `simular`: el firmware de fábrica, más lo que se le ponga o se escriba encima."""
+
+    def __init__(self, extra):
+        super().__init__(extra)
+        self.fw = open(STOCK, 'rb').read()
+
+    def __missing__(self, direccion):
+        if not STOCK_BASE <= direccion < STOCK_BASE + len(self.fw):
+            raise KeyError(direccion)
+        return self.fw[direccion - STOCK_BASE]
+
+    def cambiados(self):
+        return {d: v for d, v in self.items()
+                if not STOCK_BASE <= d < STOCK_BASE + len(self.fw) or self.fw[d - STOCK_BASE] != v}
+
+
+def referencias_a(destino):
+    """Todas las formas de llegar a `destino` en el código de fábrica: `bl`/`blcc`, `b`/`bcc` y
+    punteros de 32 bits. Se decodifica cada posición par (los falsos positivos sólo suman)."""
+    fw = open(STOCK, 'rb').read()
+    fin = min(len(fw), 0x3a0000 - STOCK_BASE) - 4
+    refs = []
+    for off in range(0, fin, 2):
+        h0, h1 = fw[off] | fw[off + 1] << 8, fw[off + 2] | fw[off + 3] << 8
+        pc = STOCK_BASE + off
+        if fw[off:off + 4] == destino.to_bytes(4, 'little'):
+            refs.append(('puntero', pc))
+        w = h0 << 16 | h1
+        mayor, s9, s10, t4 = w >> 27, w >> 18 & 0x1ff, w >> 6 & 0x3ff, w & 0xf
+        if mayor == 1 and not w >> 16 & 1:        # bl (bit 17 = 1, 25 bits) o blcc (21 bits), en palabras
+            d = (t4 << 19 | s10 << 9 | s9) if w >> 17 & 1 else (s10 << 9 | s9)
+            bits = 23 if w >> 17 & 1 else 19
+            d = (d - (1 << bits) if d >> bits - 1 else d) << 2
+            if (pc & ~3) + d == destino:
+                refs.append(('bl', pc))
+        elif mayor == 0:                          # b (bit 16 = 1, 25 bits) o bcc (21 bits), en medias palabras
+            s10b = w >> 17 & 0x3ff
+            d = (t4 << 20 | s10 << 10 | s10b) if w >> 16 & 1 else (s10 << 10 | s10b)
+            bits = 24 if w >> 16 & 1 else 20
+            d = (d - (1 << bits) if d >> bits - 1 else d) << 1
+            if (pc & ~3) + d == destino:
+                refs.append(('b', pc))
+    return refs
+
+
+def revisar_m4q(crudo):
+    """F17: M4Q entero sobre el firmware de fábrica como memoria, en cinco estados. (ok, detalle)."""
+    def palabra(v):
+        return {0: v & 0xff, 1: v >> 8}
+    a, b = M4Q_FABRICA[M4Q_RECORTE], M4Q_FABRICA[M4Q_FORMATO]
+    na, nb = M4Q_NUEVO[M4Q_RECORTE], M4Q_NUEVO[M4Q_FORMATO]
+    estados = {  # nombre: (modo, palabra del recorte, palabra del formato, log esperado, escribe)
+        'modo 4, de fábrica': (4, a, b, [4, a, b, na, nb], True),
+        'modo 0': (0, a, b, [0], False),
+        'modo 4, recorte ajeno': (4, 0xc045, b, [4, 0xc045], False),
+        'modo 4, formato ajeno': (4, a, 0x7008, [4, a, 0x7008], False),
+        'modo 4, ya aplicado': (4, na, nb, [4, na], False),
+    }
+    problemas = []
+    for nombre, (modo, pa, pb, log_esperado, escribe) in estados.items():
+        mem = MemoriaDeFabrica({M4Q_MODO + k: modo >> 8 * k & 0xff for k in range(4)})
+        mem.update({M4Q_RECORTE + k: v for k, v in palabra(pa).items()})
+        mem.update({M4Q_FORMATO + k: v for k, v in palabra(pb).items()})
+        try:
+            log, ops = simular(crudo, mem)
+        except (KeyError, ValueError) as e:
+            problemas.append(f'{nombre}: {type(e).__name__} {e}')
+            continue
+        escrituras = [o for o in ops if o[0] == 'w']
+        final = [mem[x] | mem[x + 1] << 8 for x in (M4Q_RECORTE, M4Q_FORMATO)]
+        codigo = {d: v for d, v in mem.cambiados().items() if not M4Q_MODO <= d < M4Q_MODO + 4}
+        if escribe:
+            # orden: primero el recorte nulo (inocuo con formato 0), después el formato
+            bien = escrituras == [('w', M4Q_RECORTE, 2, na), ('w', M4Q_FORMATO, 2, nb)] and final == [na, nb] \
+                and sorted(codigo) == sorted(PARCHES_ENCADENADOS['M4Q']) \
+                and ops.index(('r', M4Q_FORMATO, 2, pb)) < ops.index(escrituras[0])
+        else:
+            bien = not escrituras and final == [pa, pb]
+        if not bien or log != log_esperado:
+            problemas.append(f'{nombre}: log {log}, escrituras {escrituras}, final {[hex(x) for x in final]}, '
+                             f'bytes de código distintos {sorted(map(hex, codigo))}')
+    return not problemas, f'{len(estados)} estados; problemas: {problemas}'
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     os.makedirs(OUT)
@@ -393,6 +525,40 @@ def main():
         anotar(f'sd_ori_{fase}_lista', 'F15', lista == esperada, f'{archivo} = {lista}')
         debe_pasar(f'sd_ori_{fase}', 'F15',
                    carpeta(f'sd_ori_{fase}', {n + '.srt': leer(fase, 'Batch', n + '.srt') for n in lista}, lista))
+
+    # F16: M4Q contra el firmware de fábrica
+    m4q = leer('fase1', 'Batch', 'M4Q.srt')
+    fwb = open(STOCK, 'rb').read()
+    leidas = {d: int.from_bytes(fwb[d - STOCK_BASE:d - STOCK_BASE + 2], 'little') for d in M4Q_FABRICA}
+    def medias(d, n=2):
+        return tuple(int.from_bytes(fwb[d - STOCK_BASE + 2 * k:d - STOCK_BASE + 2 * k + 2], 'little') for k in range(n))
+    refs = [(t, d) for t, d in referencias_a(M4Q_CONVERSOR)
+            if not (d in M4Q_MITAD_DE_INSTRUCCION and t == 'b'
+                    and medias(M4Q_MITAD_DE_INSTRUCCION[d][0]) == M4Q_MITAD_DE_INSTRUCCION[d][1:])]
+    control = referencias_a(0x1653e0)  # función vecina con llamadas conocidas: el barrido las ve
+    anotar('m4q_sitio_en_firmware', 'F16',
+           leidas == M4Q_FABRICA and refs == [('bl', M4Q_LLAMADA)]
+           and ('bl', 0x148f20) in control and M4Q_LLAMADA - M4Q_FORMATO == 0x10,
+           f'palabras distintas de las leídas: {[hex(d) for d in leidas if leidas[d] != M4Q_FABRICA[d]]}; '
+           f'referencias a {M4Q_CONVERSOR:#x}: {[(t, hex(d)) for t, d in refs]}; control 0x1653e0: '
+           f'{len(control)} referencias, incluye bl 0x148f20: {("bl", 0x148f20) in control}')
+    ok, detalle = revisar_parches('M4Q')
+    anotar('parches_M4Q', 'F10 F11 F16', ok, detalle)
+
+    # F17: M4Q ejecutado sobre el firmware de fábrica, y un control de que la prueba ve un valor malo
+    ok, detalle = revisar_m4q(m4q)
+    anotar('m4q_simulado', 'F17', ok, detalle)
+    ok, detalle = revisar_m4q(mutar(m4q, f', {M4Q_NUEVO[M4Q_FORMATO]}, 0, 0, 0, 0)', ', 55301, 0, 0, 0, 0)'))
+    anotar('m4q_control_valor_cambiado', 'F17', not ok and 'modo 4, de fábrica' in detalle, detalle)
+
+    # F18: el juego M4L + M4Q, armado como va a la SD
+    lista = open(os.path.join(KIT, 'fase1', 'Batch', 'BatchScripts_M4LQ.txt')).read().split()
+    m4l = leer('fase1', 'Batch', 'M4L.srt').decode('ascii')
+    anotar('sd_m4lq_lista', 'F18',
+           lista == ['M4L', 'M4Q'] and re.search(r'= Run_SpecifyFunc\(450736, 1, 0, 4, 0, 0, 0, 0, 0\)\r\n', m4l),
+           f'BatchScripts_M4LQ.txt = {lista}; M4L deja el modo 4 antes de que corra M4Q')
+    debe_pasar('sd_m4lq', 'F18',
+               carpeta('sd_m4lq', {n + '.srt': leer('fase1', 'Batch', n + '.srt') for n in lista}, lista))
 
     # F1 + F8: el script que colgó la cámara, tal cual quedó respaldado
     colgado = open(os.path.join(COLGADO, 'EET.srt'), 'rb').read()
