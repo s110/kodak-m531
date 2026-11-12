@@ -33,7 +33,7 @@ NARGS = {PEEK32: 1, POKE32: 2, FLUSH: 2}
 ZONAS_PROHIBIDAS = ZONAS_INTOCABLES + [(0x0, 0x48000, 'vectores y pilas')]
 RAM_MAX = 0x4000000
 CLAVES = {'REM', 'LET', 'END', 'IF', 'THEN', 'ELSE', 'GOTO', 'GOSUB', 'RETURN', 'SYSTEM', 'FOREIGN',
-          'DEBUGGING', 'TRUE', 'FALSE', 'LOG_PRINT'}  # LOG_PRINT <0|1|TRUE|FALSE> <expresión> → al .LOG
+          'DEBUGGING', 'TRUE', 'FALSE', 'LOG_PRINT', 'VERIFY', 'IGNORE'}  # LOG_PRINT VERIFY|IGNORE <expresión>
 RESERVADOS = {'reset', 'iso_calibration', 'battestcipa', 'battestpreview', 'preview'}
 
 # esquema de argumentos: lista de ('int', min, max) | ('str',) | ('val',) = entero literal o variable
