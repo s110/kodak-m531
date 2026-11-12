@@ -144,9 +144,27 @@ Estas tres pruebas la acotan. Antes: `python3 -I tools/e2e_scripts.py` (32 casos
    El modo 4 sin SaveCFAonTake no corrió antes en la cámara: si se congela, batería y SD fuera.
 3. **P8 en vertical.** Kit P8 (modo 0 con RAW): una foto vertical; la revisión debe verse bien.
 4. Lectura: horizontal bien y vertical mal → rama de orientación de la revisión. M4N bien → la revisión
-   depende del guardado del RAW. Todo con ruido salvo P8 → depende sólo del modo (puntero `ctx+8`).
+   depende del guardado del RAW. Todo con ruido salvo P8 → depende sólo del modo. (Resultado: todo con ruido; el puntero `ctx+8` quedó
+   descartado por código para la foto normal, ver 7e.)
 5. Los RAW de M4L/M4R se convierten ya sin parámetros: `tools/m531raw.py dng 101O####.RAW -o salida.dng`
    (`"modo4": "lineal12"`, blanco 4095).
+
+### 7e — Siguiente prueba de la revisión (sin script nuevo; no hay `M4Q`)
+Análisis: `../NOTAS.md`, sección "el candidato `ctx+8` queda descartado". La causa no está leída y ningún
+parche de RAM se puede justificar. Las dos pruebas usan scripts que ya están en el kit.
+1. **8c (M4L + ORI)**, tal como está en el paso 8. Es la prueba con más información: todas las revisiones
+   de modo 4 pasaron por la rama con giro de `0xf117c`; la rama sin giro usa otro origen y otro formato.
+   Una foto horizontal nivelada y otra en picado. Anotar cómo sale la revisión de cada una.
+   - Revisión correcta → la falla está en la rama con giro combinada con el modo ≠ 0. Siguiente paso:
+     leer esa rama contra la de modo 0 (P8 también giraba y revisaba bien).
+   - Revisión con ruido → la rama de giro no influye; seguir con el punto 2.
+2. **M2V (modo 2, 10 bits, RAW de 17.625.600 B)**, como en 7c: `M2V.LOG` = `VERIFY: 235211523`,
+   `VERIFY: 235080451`, `VERIFY: 2`. Una foto; mirar la revisión. Separa en parte "cualquier modo ≠ 0" de
+   "RAW grande": el RAW del modo 2 ocupa 3,5 MB menos que el del modo 4 y deja libres los pools que el
+   modo 4 pisa entre `0x0323f600` y `0x0358a400` (`0x46`, `0x24`, `0x3f`, `0x2e`, `0x19`, `0x2a`, `0x18`).
+   - Revisión correcta en M2V y con ruido en M4L → apoya la hipótesis de la extensión del RAW.
+   - Las dos con ruido → la causa es otro uso del modo; hay que seguir leyendo `0x186694` y la cola `0x3ffa30`.
+   - El modo 2 nunca corrió en esta cámara: si se congela, batería y SD fuera.
 
 Al terminar cada tramo, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS`.
 

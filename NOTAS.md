@@ -1083,8 +1083,9 @@ y pendiente 1,13–1,17 contra el JPG de la cámara) y con 1981 y 1982 de P9. `t
 - **M4N** = M4R sin SaveCFAonTake (`dump/raw16`, 2006–2009; log `30757, 28712, 4`): sólo JPG, sin RAW,
   JPG correctos. La revisión sale **igual de mal**, pero bastante más rápido. Guardar el RAW tampoco es la causa.
 - Conclusión: la revisión se rompe con cualquier modo de captura ≠ 0 (P9, M3F2/M3V, M4L/M4R/M4N), aunque
-  la salida del IRP (JPG y sus miniaturas) esté bien. En modo 0 (P8) está bien. Sigue en pie el
-  candidato `ctx+8 = raw + N·ancho·alto` con N=2 en modo ≠ 0. Sin M4Q todavía.
+  la salida del IRP (JPG y sus miniaturas) esté bien. En modo 0 (P8) está bien. El candidato
+  `ctx+8 = raw + N·ancho·alto` quedó descartado después para la foto normal (ver la sección "el candidato
+  `ctx+8` queda descartado"). Sin M4Q todavía.
 - Aparte: con cualquier kit de scripts **todas** las fotos salen en vertical (3216×4288, etiqueta 1),
   también las tomadas en horizontal, en el JPG y en la revisión; las de fábrica salen horizontales
   (499 de 4288×3216 y 155 de 3216×4288 en `dump/sd_original`). En análisis aparte.
@@ -1197,3 +1198,67 @@ más los archivos de `dump/`. Sin cámara: ORI no corrió todavía.
   `0xf02a0` lee igual mientras `[0x3da998]` siga en 1, y un 1 o 2 con el ajuste ≠ 0 da 3 o 4.
 
 Procedimiento: `sd_kit/PASOS.md`, paso 8.
+
+## 2026-11-12 — Revisión con ruido en modo ≠ 0: el candidato `ctx+8` queda descartado; sin M4Q
+
+Análisis estático (`work/code_full.s`, Ghidra con `-noanalysis`, `dump/ram_snapshot.bin`). Sin cámara.
+**La causa sigue sin identificar y no hay `M4Q`**: ninguna escritura de RAM se puede justificar con lo
+leído. Lo nuevo es que el camino de una foto normal no pasa por el puntero que era el candidato principal.
+
+**Leído en el código**
+1. *Disparo normal.* Los manejadores del disparador (`0x1e4ba0`, `0x1e5018`) llaman a `0x12923c` con
+   `r2 = 0`, que llega a `0x126f20` como `r16 = 0`. Con `r16 = 0` hay dos caminos y ninguno usa el modo
+   para colocar `ctx+8`:
+   - normal (`0x126fdc` → `0x12b3c4` con `r0 = 0`, rama `0x12b518–0x12b546`): la cabecera `ctx` sale de
+     una de las tres ranuras del pool `0x22` (`0x03c23000`, `0x22400` B); `ctx+4` (RAW) = `[P+8] + r19`,
+     con `P` sacado de la cola de búferes `[0x3dbdcc] = 0x3ffa30` por `0x12af1c`; **`ctx+8` = base del
+     pool `0x25`** (`0x03b6c000`, `0xb7000` B). La llamada a `0x6e0d0` de `0x12b536` descarta el resultado.
+   - ráfaga (`0x126f68`, sólo si `r15 = 1` y `0xf0944() ≠ 0`): `ctx+8 = búfer + ancho·alto` (N = 1 fijo).
+   La cuenta `ctx+8 = raw + N·ancho·alto` con N = 2 en modo ≠ 0 (`0x12b4a0`, `0x12b628`) sólo corre cuando
+   se pasa un búfer: lanzadores `0x7d402`, `0x7d928`, `0x7dc1a` (zona de los envíos por USB) y la cabecera
+   siguiente de ráfaga (`0x127220` → `0x12b584`, sólo con el byte `[0x3dbd80] = 1`, que pone la rama de
+   ráfaga). **En una foto normal `ctx+8` no depende del modo.**
+2. *Buffers de la revisión* (`0xf0d14` → `0xf0e7c`, `0xf117c`, diferido `0xf0ad8`):
+   - imagen pequeña de origen: `struct+4` = `param+0x60` del procesado, dentro del búfer de salida del
+     trabajo de procesado; ese búfer es el pool `0x0e` (`0x005fac00–0x020bd000`), puesto por `0x12b6ec`
+     (`job+0x18/0x1c`, `[img+0x74]`).
+   - `0xdc7ec(2, 1, origen, S+8, …)` la reduce al pool `0x26` (`0x03ce4400`, `0x20000` B); `0xf0e7c`
+     rechaza la revisión si `S+0x2a · S+0x2c` no cabe ahí. `S` = `0x3da9ac`.
+   - con `[0x3d95ff] ≠ 5` (`0x66f30`): `S+0x10 = raw`, `S+0x14 = raw+0x300000`, `S+0x24 = 2`, copia de la
+     imagen pequeña a `raw+0x34b000` (`0x48120` es `memmove`) y dibujo diferido por `0xf0ad8`
+     (puesto en cola con `0x5c3b8`). En la rama con giro (`ctx+0x2c` = 1 o 2) `0xf117c` copia filas desde
+     `S+0xc` (pool `0x26`) al lienzo `raw+0x300000` y llama a `0xdc9d4` con área de trabajo `raw` (≥ 3 MB).
+   - `0xf0ad8` usa además el pool `0x13` (`0x024b8400`) para los recuadros de caras.
+   Todas estas direcciones salen de `ctx+4` o de pools fijos. Ninguna lee `ctx+8` ni el modo.
+3. *Segundo portador del modo.* `0xe3cd4` (lectura del sensor) guarda el modo del disparo en
+   `[0x3da804+0x24]` = `0x3da828`. Su único lector (`0xe43f0`) es `0x76680`, el tamaño del RAW
+   (8, 12 o 16 bits por píxel). Lo usan el guardado del RAW (`0x1271d4`, `0x1271fc`), `job+0xc` del
+   procesado (`0x12b7c6`, con tope `[img+140]`) y los lanzadores de USB.
+4. *Vista previa por hardware durante la lectura* (`0xe3ac0`, bit 10 de `0x0ff10080`, registro
+   `0x0ff10088`): sólo se arma si `[0x3dbd7c] ≠ 0`. Su único escritor (`0x127700`) no tiene llamadas ni
+   punteros en el firmware y en la RAM volcada vale 0. No interviene.
+
+**Descartado (por código)**
+- Que `ctx+8` (N = 2) coloque algo de la revisión fuera del pool 8 en una foto normal: ese puntero, en
+  el disparo normal, apunta al pool `0x25` en todos los modos.
+- Que la revisión lea un búfer cuya dirección dependa del modo: la lista del punto 2 es completa para
+  `0xf0d14`, `0xf0e7c`, `0xf117c` y `0xf0ad8`.
+
+**Inferido, sin prueba**
+- Lo único del camino que cambia con el modo y no se ve en el JPG es la extensión del RAW: 14,1 MB en
+  modo 0, 21,15 MB en modo 4 y 28,2 MB en modo 3. Si el RAW empieza en la base del pool 8, en modo 4
+  ocupa hasta `0x0358a400` y pisa pools superpuestos que el modo 0 deja libres (`0x0a`, `0x21`, `0x2d`,
+  `0x46`, `0x47`, `0x19`, `0x24`, entre otros). Una revisión que reutilice algo preparado antes del
+  disparo en esa zona saldría con ruido en todos los modos ≠ 0. Falta leer qué hay en `[P+8]` (la cola
+  `0x3ffa30` está vacía en el volcado) y qué usa `0x186694` además del área de trabajo. Es una hipótesis
+  de trabajo: no hay una lectura concreta que la respalde.
+- La rama sin giro de `0xf117c` (`default`) toma otro formato de salida (`0xdc9c8`) y otro origen. Sigue
+  sin probarse en modo 4 (ver la sección de ORI).
+
+**Por qué no hay M4Q.** No se sabe qué memoria se corrompe ni en qué momento. Cualquier parche (cambiar
+N, mover el área de trabajo, forzar `[0x3d95ff]`) toca funciones que corren en cada disparo o variables
+que leen otras partes del firmware, y no se puede demostrar que dejen intactos el RAW, el JPG y los
+demás pools.
+
+**Siguiente prueba en la cámara** (`sd_kit/PASOS.md`, 7e): primero 8c (M4L + ORI, ya preparada); después
+M2V si 8c sale con ruido.
