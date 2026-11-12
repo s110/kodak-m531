@@ -654,3 +654,25 @@ RAM y los archivos de `dump/raw1`. Sin cámara: lo que sigue separa lo leído de
   del boot (archivos TBM y DELETE al encender). Falta probarla en la cámara; ver REVERSIBILIDAD.
 - "El cuelgue de la segunda foto en modo 3: sospecha de vista previa mal formateada": la segunda
   captura y su "JPG" de 224 B se completaron; el cuelgue es posterior y su causa sigue sin probar.
+
+## 2026-11-12 — EE0 probado en la cámara: realce del JPG a cero (ISO ≤ 159)
+
+- Primera vez que corren en la cámara un `IF` y un `poke32`: `EE0.LOG` = `VERIFY: 4473808` y luego
+  `VERIFY: 4472856`. Sin congelamiento. P8 siguió dando `0 / 1 / 0`.
+- Fotos en `dump/raw8` (con `SHA256SUMS`), modo 0 (P8), Sharpness Normal, misma escena:
+
+  | foto | kit | ISO | flash | borde JPG / borde RAW | energía alta frec. JPG | RAW |
+  |---|---|---|---|---|---|---|
+  | 1984 | P8 + EE0 | 64 | sí | 0,356 | 0,054 | 0,084 |
+  | 1985 | P8 solo | 64 | sí | 0,568 | 0,118 | 0,073 |
+  | 1983 | P8 + EE0 | 160 | no | 0,396 | 0,106 | 0,120 |
+  | 1986 | P8 solo | 160 | no | 0,375 | 0,115 | 0,126 |
+
+  "Borde" = media |laplaciano| en el centro; la razón JPG/RAW quita la diferencia de enfoque y escena.
+  Con ISO 64 EE0 baja el realce un 37 % y la energía de alta frecuencia del JPG a la mitad, con el RAW
+  igual. Con ISO 160 no cambia nada: es la banda siguiente, que EE0 no toca. Coincide con el análisis.
+- Para cubrir ISO ≥ 160 hace falta EET (todas las bandas), todavía sin probar.
+- 101_1987.JPG quedó de 0 B (disparo seguido); el RAW está completo. `m531raw.py` ya no falla con un
+  JPG hermano vacío o truncado.
+- El único error del verificador sobre la SD fue `._BatchScripts.txt` (metadatos de macOS al escribir
+  con `printf >`); escribir en la SD con `cp -X` o borrar los `._*` antes de expulsar.

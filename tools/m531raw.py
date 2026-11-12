@@ -301,6 +301,10 @@ def neutro_desde_jpg(ruta_raw, img, cfa):
     if not os.path.exists(ruta) or img.shape != (3264, 4320):
         return None
     from PIL import Image
+    try:  # la cámara puede dejar el JPG vacío o truncado (p. ej. 101_1987.JPG de 0 B)
+        Image.open(ruta).load()
+    except Exception:
+        return None
     pos = {c: [(i // 2, i % 2) for i, ch in enumerate(cfa) if ch == c] for c in 'RGB'}
     a = img.astype(np.float64) / 1023
     canal = {c: np.mean([a[y::2, x::2] for y, x in pos[c]], axis=0) for c in 'RGB'}
