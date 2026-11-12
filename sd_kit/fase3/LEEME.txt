@@ -12,3 +12,10 @@ Normal, sin zoom digital.
   2. Foto B con este kit (P8 + EE0).
 Comparar bordes y halos en los JPG. El RAW no cambia (el realce sólo afecta al JPG).
 No toca: otras bandas de ISO, Sharpness Bajo/Alto, ASharp (segundo realce) ni la reducción de ruido.
+
+Variantes (no están en BatchScripts.txt; agregarlas una a una después de probar EE0):
+  EET      realce a cero en las 11 bandas de ISO (Sharpness Normal). Usa GOTO suelto: experimental.
+  ASHARP0  apaga el segundo realce (ASharp) con un parche de código en 0x128900. Experimental.
+  NRE0     apaga la reducción de ruido multiescala (NRE) en 0x128890: más grano y manchas de color.
+           Experimental: la variante sin NRE no está probada con 14 MP; si falla, JPG de 224 B o cuelgue.
+Todas tienen guardia sobre el valor de fábrica y dejan el resultado en su .LOG. Se pierden al apagar.

@@ -11,7 +11,8 @@ Para cada palabra de 32 bits afectada, el script:
   3. vacía la caché de datos de cada palabra escrita (dcache_flush_range 0x24e140, 4 bytes) para
      que el núcleo lea el código nuevo desde la memoria. No hay forma de invalidar una posible caché
      de instrucciones: parchear sólo código que no se ejecutó en esta sesión (ver NOTAS.md);
-  4. muestra el resultado en pantalla.
+  4. relee cada palabra y la anota en el .LOG (LOG_PRINT VERIFY); si la guardia falla, sólo anota
+     la lectura original y no escribe nada.
 Es exactamente el mismo cambio de bytes que km531fw.py aplicaría al .FW: así se prueba antes de
 flashear. La sintaxis de IF/GOTO y los números negativos se confirman con la sonda P5 del kit.
 """
@@ -70,12 +71,13 @@ def generar(nombre, parches):
     for i, (w, _, nv) in enumerate(ws):
         add(f'FOREIGN r{i} = Run_SpecifyFunc({POKE32}, 2, 0, {w}, {s32(nv)}, 0, 0, 0, 0)')
         add(f'FOREIGN f{i} = Run_SpecifyFunc({FLUSH}, 2, 0, {w}, 4, 0, 0, 0, 0)')
-    add(f'SYSTEM ScreenString(20, 180, "{nombre[:20]} OK")')
-    add('SYSTEM delay_us(1500000)')
+    # la pantalla no muestra lo que dibujan los scripts al arrancar: el resultado va al .LOG
+    for i, (w, _, _) in enumerate(ws):
+        add(f'FOREIGN c{i} = Run_SpecifyFunc({PEEK32}, 1, 0, {w}, 0, 0, 0, 0, 0)')
+        add(f'LOG_PRINT VERIFY c{i}')
     add('END')
-    L.append(f'9000 SYSTEM ScreenString(20, 180, "{nombre[:12]} NO: otro firmware")')
-    L.append('9010 SYSTEM delay_us(3000000)')
-    L.append('9020 END')
+    L.append('9000 LOG_PRINT VERIFY v0')  # guardia fallida: sólo queda la lectura original
+    L.append('9010 END')
     L.append('RUN')  # sin RUN el programa sólo se carga (0x10776c)
     return '\r\n'.join(L) + '\r\n'
 

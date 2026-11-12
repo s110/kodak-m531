@@ -1,0 +1,12 @@
+10 REM ASHARP0: parche en RAM de 1 palabra(s); se pierde al apagar
+20 FOREIGN v0 = Run_SpecifyFunc(1674172, 1, 0, 1214720, 0, 0, 0, 0, 0)
+30 IF v0 == -1945951860 THEN 50
+40 GOTO 9000
+50 FOREIGN r0 = Run_SpecifyFunc(3050116, 2, 0, 1214720, -2147475060, 0, 0, 0, 0)
+60 FOREIGN f0 = Run_SpecifyFunc(2416960, 2, 0, 1214720, 4, 0, 0, 0, 0)
+70 FOREIGN c0 = Run_SpecifyFunc(1674172, 1, 0, 1214720, 0, 0, 0, 0, 0)
+80 LOG_PRINT VERIFY c0
+90 END
+9000 LOG_PRINT VERIFY v0
+9010 END
+RUN
