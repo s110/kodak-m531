@@ -1450,3 +1450,14 @@ caché. No corrió todavía en la cámara.
 fábrica (literal, única carga, llamada única de `0x1b02e0` y de `0x122944`, bit 19 en `0x147824`),
 M4W ejecutado sobre el firmware con M4L y M4Q encima en cinco estados con un control, y el juego
 M4L + M4Q + M4W. Pasos en la cámara: `sd_kit/PASOS.md`, paso 10.
+
+## 2026-11-12 — M4W probado en la cámara: revisión mejor, kit M4L + M4Q + M4W
+
+- Logs exactos: M4L `8, 30757, 3, 28712, 4`; M4Q `4, 49220, 28682, 51012, 55300`; M4W `28712, 55300, 56, 48`.
+- El usuario: la revisión "salió mejor", sin el tono verdoso. Fotos 2015–2018 en `dump/raw19` (con `SHA256SUMS`).
+- JPG correctos. Las cuatro con flash (`Flash` = 25). Ganancias AWB del MakerNote ya no son las por omisión
+  (400, 256, 456): 2015–2017 ≈ (471–491, 256, 389–392); 2018, con el preset Luz día (`WhiteBalance` = 1,
+  `LightSource` = 1), (504, 256, 375).
+- Blanco de referencia: el mouse blanco (más blanco que las teclas). En 2017 (vista cenital) y 2018 el mouse
+  satura en parte (3,8 % de píxeles a 254+); las zonas claras sin saturar salen neutras (R/G 1,00–1,01,
+  B/G 0,98–1,00). En 2015/2016 los claros mezclan madera y salen cálidos (R/G 1,19–1,25).
