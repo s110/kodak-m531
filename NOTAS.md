@@ -249,3 +249,15 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
 - Foto tomada después (`101_1964.JPG`): **sin RAW**. Nada vuelve a poner la bandera en 0 al entrar a
   captura (los otros llamadores del setter son pruebas de fábrica). Hipótesis: el guardado del CFA
   necesita además el modo de captura 3 → sonda P6 con `Take12BitCCDRaw(1)` y LOG_PRINT.
+
+## Prueba 3 (2026-11-11, cortada por límite de uso)
+
+- Con la SD puesta, la cámara conectada al Mac se presenta como **PTP (clase USB 6)**, no como
+  almacenamiento: no aparece el CD virtual y **no se puede leer la RAM** por esa vía. La lectura de
+  RAM sólo funcionó sin SD (CD virtual, clase 8). Probar: encender con SD (corre el script), sacar
+  la SD con la cámara encendida, conectar USB → ¿aparece el CD? Si no, revisar el ajuste USB del menú.
+- El menú oculto **no aparece** con la carpeta `\HiddenMenu` (vía tomada del manual de la M530).
+  Pendiente buscar en el código qué comprueba `\HiddenMenu` (cadena referenciada desde 0x23bd5c)
+  y si hace falta además una combinación de teclas en About.
+- P6 (Take12BitCCDRaw) corrió sin error y sin RAW en las fotos 1965/1966. P6 corregido con
+  `LOG_PRINT VERIFY` ya está en la SD; falta leer su .LOG tras el próximo arranque.
