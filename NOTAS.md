@@ -370,3 +370,7 @@ Secciones anteriores que quedan superadas (no se reescriben para conservar el hi
   equivocado, como predijo Fable). Patrón GBRG verificado. El balance no se puede calibrar con estas
   fotos: los canales llegan con otras ganancias que en el modo 0 y el JPG no sirve de referencia.
   Siguiente: la misma escena en modo 0 y en modo 4 para medir la relación entre ambos.
+- Macropad (1975–1977, modo 4): neutro sobre la tecla casi blanca = (0,81, 1, 0,77), estable entre
+  fotos; queda como balance fijo del modo 4 (`NEUTRO_M531_MODO4`). La madera sigue verdosa-amarilla con
+  ambas matrices; la de la C713 da colores de teclas más fieles en este modo. Pendiente: la misma escena
+  en modo 0 (P8, ya en la SD) para comparar contra el JPG bueno y ajustar matriz/balance del modo 4.
