@@ -42,3 +42,8 @@ ASHARP0 y NRE0 usan peek16/poke16 (0x736e6, 0x13f09a) y el vaciado de caché (0x
 no corrieron en la cámara: probarlos de a uno, después de EE0.
 Ninguna usa GOTO ni números negativos: guardia con "IF v == N THEN línea"; si falla, anota la
 lectura y termina con END. Todas dejan el resultado en su .LOG y se pierden al apagar.
+
+ORI: fotos y revisión sin girar (sensor de orientación sin lectura, sólo RAM). Lista: BatchScripts_ORI.txt
+(P8, EET, EETV, ORI), que va a la SD con el nombre BatchScripts.txt, más los cuatro .srt.
+  ORI.LOG  VERIFY: 257 y VERIFY: 1   (o VERIFY: 256 y VERIFY: 0)
+Una sola línea: ORI no escribió nada. Las fotos verticales tampoco se giran. Detalle: ../PASOS.md, paso 8.

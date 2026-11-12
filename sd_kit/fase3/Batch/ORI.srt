@@ -1,0 +1,15 @@
+10 REM ORI: sensor de orientacion sin lectura (solo RAM): fotos y revision sin girar
+20 FOREIGN a = Run_SpecifyFunc(472806, 1, 0, 4041112, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY a
+40 IF a == 257 THEN 70
+50 IF a == 256 THEN 110
+60 END
+70 FOREIGN p = Run_SpecifyFunc(1306778, 2, 0, 4041112, 1, 0, 0, 0, 0)
+80 FOREIGN b = Run_SpecifyFunc(472806, 1, 0, 4041112, 0, 0, 0, 0, 0)
+90 LOG_PRINT VERIFY b
+100 END
+110 FOREIGN q = Run_SpecifyFunc(1306778, 2, 0, 4041112, 0, 0, 0, 0, 0)
+120 FOREIGN c = Run_SpecifyFunc(472806, 1, 0, 4041112, 0, 0, 0, 0, 0)
+130 LOG_PRINT VERIFY c
+140 END
+RUN

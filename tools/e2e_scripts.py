@@ -33,6 +33,18 @@ Cómo puede fallar el verificador (escrito antes del código; cada punto es un c
       mezclados (guardia de 32 bits y escritura de 16).
   F12. La lista BatchScripts_<nombre>.txt de un script experimental nombra otra cosa, o ese juego,
       armado solo como iría a la SD, no pasa el verificador.
+  F13. ORI (sensor de orientación) apunta a otra dirección que la que consulta el firmware, o esa
+      dirección ya no es la compuerta: `0xf02a0` devuelve 0 (cámara horizontal) sin leer el sensor
+      cuando el byte `[0x3da998]` o el byte `[0x3da998 + 1]` vale 0. La dirección se coteja con el
+      literal de `0xf032c` y la compuerta con las instrucciones de `0xf02b6–0xf02c5` del firmware
+      de fábrica, no con los números del script.
+  F14. ORI escribe sin haber leído, escribe con un valor inicial que no previó (en la cámara: pisa
+      un estado desconocido), cambia el byte bajo (bandera "sensor alimentado", que comparte la
+      palabra de 16 bits), deja el byte alto distinto de 0, o no relee y registra. Se ejecuta el
+      script entero en un intérprete mínimo sobre una memoria simulada, con los dos estados que el
+      firmware puede dejar (0x0101, 0x0100) y con seis que no debería tocar.
+  F15. El juego de prueba de ORI (P8 + EET + EETV + ORI, y M4L + ORI) no pasa el verificador, su
+      lista nombra otra cosa, o las dos copias de ORI.srt (fase1 y fase3) difieren.
 
 Corre la CLI de verdad sobre carpetas armadas en work/e2e_scripts/. Artefacto:
 work/e2e_scripts/reporte.json (veredicto por caso, salida de la CLI y SHA-256 de cada script).
@@ -72,6 +84,15 @@ PARCHES = {
 }
 TABLAS = {'FOREIGN': 0x486334, 'SYSTEM': 0x4871f4, 'DEBUGGING': 0x487404}
 TIPOS = {0: 'int', 1: 'float', 2: 'str', 6: 'void'}
+# ORI: compuerta del sensor de orientación, leída en el desensamblado de 0xf02a0. El literal de
+# 0xf032c es la base (r15); la función devuelve 0 si [r15+0] == 0 o si [r15+1] == 0, antes de
+# esperar y de leer el puerto 0x0ff04034. Palabras de 16 bits (LE) de 0xf02b6 a 0xf02c5:
+# `ldb_s r0,[r15,0]; cmp_s r0,0; beq 0xf036a; ldb_s r0,[r15,1]; cmp_s r0,0; beq 0xf036a`,
+# y en 0xf036a `mov_s r0,0`.
+ORI_LITERAL, ORI_COMPUERTA, ORI_SALIDA = 0xf032c, 0xf02b6, 0xf036a
+ORI_CODIGO = [0x8f00, 0xe080, 0x00b2, 0x0001, 0x8f01, 0xe080, 0x00aa, 0x0001]
+ORI_ESTADOS = (0x0101, 0x0100)                                   # los que el firmware puede dejar
+ORI_AJENOS = (0x0001, 0x0000, 0x0201, 0x0102, 0xffff, 0x0180)    # ya aplicado, o desconocidos
 LINEA_COLGADA = '460 FOREIGN Run_SpecifyFunc(3050116, 2, 0, 1785216, 4472856, 0, 0, 0, 0)'
 
 casos = []
@@ -210,6 +231,78 @@ def revisar_parches(nombre, crudo=None):
         f'{len(escrituras)} escritura(s), bytes cambiados {sorted(map(hex, tocados))}; problemas: {problemas}'
 
 
+def simular(crudo, memoria, pasos=1000):
+    """Ejecuta un script del subconjunto verificado sobre `memoria` ({dirección: byte}). Sólo conoce
+    peek/poke por Run_SpecifyFunc, LOG_PRINT VERIFY, `IF v == N THEN línea`, REM y END; cualquier otra
+    sentencia, una lectura fuera de la memoria dada o una variable sin valor es un error (no se salta
+    nada en silencio). Devuelve (log, operaciones) con operaciones = [('r'|'w', dirección, ancho, valor)]."""
+    prog = []
+    for l in crudo.decode('ascii').splitlines():
+        m = re.match(r'(\d+) (.*)$', l)
+        if m:
+            prog.append((int(m.group(1)), m.group(2).strip()))
+    lineas = [n for n, _ in prog]
+    llamada = re.compile(r'FOREIGN ([a-z]) = Run_SpecifyFunc\((\d+), (\d+), 0, (\d+), (\d+), 0, 0, 0, 0\)$')
+    var, log, ops, i = {}, [], [], 0
+    for _ in range(pasos):
+        if i >= len(prog):
+            raise ValueError('el programa se acaba sin END')
+        cuerpo = prog[i][1]
+        i += 1
+        if re.match(r'REM( |$)', cuerpo):
+            continue
+        if cuerpo == 'END':
+            return log, ops
+        m = llamada.match(cuerpo)
+        if m:
+            f, direccion, valor = int(m.group(2)), int(m.group(4)), int(m.group(5))
+            if f in PEEK:
+                var[m.group(1)] = int.from_bytes(bytes(memoria[direccion + k] for k in range(PEEK[f])), 'little')
+                ops.append(('r', direccion, PEEK[f], var[m.group(1)]))
+            elif f in POKE:
+                for k in range(POKE[f]):
+                    memoria[direccion + k]  # KeyError si escribe fuera de la memoria modelada
+                    memoria[direccion + k] = valor >> 8 * k & 0xff
+                var[m.group(1)] = 0
+                ops.append(('w', direccion, POKE[f], valor))
+            else:
+                raise ValueError(f'función {f:#x} fuera del intérprete de prueba')
+            continue
+        m = re.match(r'LOG_PRINT VERIFY ([a-z])$', cuerpo)
+        if m:
+            log.append(var[m.group(1)])
+            continue
+        m = re.match(r'IF ([a-z]) == (\d+) THEN (\d+)$', cuerpo)
+        if m:
+            if var[m.group(1)] == int(m.group(2)):
+                i = lineas.index(int(m.group(3)))
+            continue
+        raise ValueError(f'sentencia fuera del intérprete de prueba: {cuerpo!r}')
+    raise ValueError('el programa no termina')
+
+
+def revisar_ori(crudo, direccion):
+    """F14 sobre ORI: lo corre con cada estado inicial de la palabra [direccion]. (ok, detalle)."""
+    problemas = []
+    for inicial in ORI_ESTADOS + ORI_AJENOS:
+        mem = {direccion: inicial & 0xff, direccion + 1: inicial >> 8}
+        try:
+            log, ops = simular(crudo, mem)
+        except (KeyError, ValueError) as e:
+            problemas.append(f'{inicial:#06x}: {type(e).__name__} {e}')
+            continue
+        final = mem[direccion] | mem[direccion + 1] << 8
+        escrituras = [o for o in ops if o[0] == 'w']
+        if inicial in ORI_ESTADOS:
+            esperado = inicial & 0xff  # byte bajo intacto, byte alto (compuerta) en 0
+            if final != esperado or log != [inicial, esperado] or len(escrituras) != 1 \
+                    or ops[0] != ('r', direccion, 2, inicial) or ops[-1] != ('r', direccion, 2, esperado):
+                problemas.append(f'{inicial:#06x}: final {final:#06x}, log {log}, operaciones {ops}')
+        elif escrituras or final != inicial or log != [inicial]:
+            problemas.append(f'{inicial:#06x}: no debía escribir; final {final:#06x}, log {log}, operaciones {ops}')
+    return not problemas, f'{len(ORI_ESTADOS)} estados con escritura y {len(ORI_AJENOS)} sin ella; problemas: {problemas}'
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     os.makedirs(OUT)
@@ -260,6 +353,46 @@ def main():
     # F10: el control detecta un decimal mal convertido (guardia de M4L con un dígito cambiado)
     ok, detalle = revisar_parches('M4L', mutar(leer('fase1', 'Batch', 'M4L.srt'), 'IF b == 30757', 'IF b == 30767'))
     anotar('parches_M4L_guardia_mutada', 'F10', not ok and 'no es el valor de fábrica' in detalle, detalle)
+
+    # F13: ORI contra el firmware de fábrica y la RAM volcada
+    fw, ram = open(STOCK, 'rb').read(), open(RAM, 'rb').read()
+
+    def palabra(dir_ram, n=2):
+        return int.from_bytes(fw[dir_ram - STOCK_BASE:dir_ram - STOCK_BASE + n], 'little')
+
+    ori = leer('fase3', 'Batch', 'ORI.srt')
+    base = palabra(ORI_LITERAL, 4)
+    usadas = {int(x) for x in re.findall(r'Run_SpecifyFunc\(\d+, \d+, 0, (\d+),', ori.decode('ascii'))}
+    codigo = [palabra(ORI_COMPUERTA + 2 * k) for k in range(len(ORI_CODIGO))]
+    # destino de cada `beq` (0xf02ba y 0xf02c2): (pc & ~3) + desplazamiento, que en estas dos
+    # instrucciones es su primera palabra; los dos deben caer en `mov_s r0,0`
+    saltos = [((ORI_COMPUERTA + 4 + 8 * k) & ~3) + codigo[2 + 4 * k] for k in range(2)]
+    en_ram = int.from_bytes(ram[base:base + 2], 'little')
+    anotar('ori_direccion_y_compuerta', 'F13',
+           usadas == {base} and codigo == ORI_CODIGO and saltos == [ORI_SALIDA] * 2
+           and palabra(ORI_SALIDA) == 0xd800 and en_ram in ORI_ESTADOS
+           and fw.count((base + 1).to_bytes(4, 'little')) == 1,
+           f'ORI usa {sorted(map(hex, usadas))}, literal de {ORI_LITERAL:#x} = {base:#x}; compuerta '
+           f'{[hex(c) for c in codigo]}, saltos a {[hex(x) for x in saltos]}, allí {palabra(ORI_SALIDA):#x}; '
+           f'la RAM volcada tiene {en_ram:#06x}; literales a {base + 1:#x} en el código: '
+           f'{fw.count((base + 1).to_bytes(4, "little"))}')
+
+    # F14: ORI ejecutado sobre memoria simulada, y dos controles de que la prueba ve los errores
+    ok, detalle = revisar_ori(ori, base)
+    anotar('ori_ejecutado', 'F14', ok, detalle)
+    ok, detalle = revisar_ori(mutar(ori, '4041112, 1, 0, 0, 0, 0)', '4041112, 257, 0, 0, 0, 0)'), base)
+    anotar('ori_byte_alto_sin_apagar', 'F14', not ok and '0x0101: final 0x0101' in detalle, detalle)
+    ok, detalle = revisar_ori(mutar(ori, '60 END\r\n', '60 REM\r\n'), base)
+    anotar('ori_sin_corte_por_valor_ajeno', 'F14', not ok and 'no debía escribir' in detalle, detalle)
+
+    # F15: los dos juegos de prueba de ORI, armados como irían a la SD
+    anotar('ori_copias_iguales', 'F15', ori == leer('fase1', 'Batch', 'ORI.srt'), 'fase1/ORI.srt == fase3/ORI.srt')
+    for fase, archivo, esperada in (('fase3', 'BatchScripts_ORI.txt', ['P8', 'EET', 'EETV', 'ORI']),
+                                    ('fase1', 'BatchScripts_ORIM4L.txt', ['M4L', 'ORI'])):
+        lista = open(os.path.join(KIT, fase, 'Batch', archivo)).read().split()
+        anotar(f'sd_ori_{fase}_lista', 'F15', lista == esperada, f'{archivo} = {lista}')
+        debe_pasar(f'sd_ori_{fase}', 'F15',
+                   carpeta(f'sd_ori_{fase}', {n + '.srt': leer(fase, 'Batch', n + '.srt') for n in lista}, lista))
 
     # F1 + F8: el script que colgó la cámara, tal cual quedó respaldado
     colgado = open(os.path.join(COLGADO, 'EET.srt'), 'rb').read()

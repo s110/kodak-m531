@@ -150,6 +150,46 @@ Estas tres pruebas la acotan. Antes: `python3 -I tools/e2e_scripts.py` (32 casos
 
 Al terminar cada tramo, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS`.
 
+## Paso 8 — Fotos y revisión sin girar (ORI: sensor de orientación sin lectura, sólo RAM)
+Análisis: `../NOTAS.md`, sección "Fotos horizontales guardadas en vertical". ORI no corrió todavía en la
+cámara. Antes: `python3 -I tools/e2e_scripts.py` (41 casos). Quickview en **On**.
+
+### 8a — Control sin ORI (separa "picado" de "sensor atascado"; no cambia nada en la SD)
+Con el kit que ya esté en la SD, o sin `Batch/`:
+1. Foto horizontal **nivelada**, mirando al frente (una pared, una ventana).
+2. Foto horizontal **en picado** al escritorio, como las de prueba anteriores.
+3. Lectura: nivelada 4288×3216 y picada 3216×4288 → el sensor funciona y se confunde al apuntar hacia
+   abajo. Las dos 3216×4288 → el sensor está atascado. En los dos casos ORI corrige el resultado.
+
+### 8b — P8 + EET + EETV + ORI
+1. Claude deja en `Batch/` de la SD cinco archivos de `fase3/Batch`: `P8.srt`, `EET.srt`, `EETV.srt`,
+   `ORI.srt` y `BatchScripts.txt` (copia de `BatchScripts_ORI.txt`: P8, EET, EETV, ORI). Preparación
+   como en 6.1: borrar `.LOG` y `.srt` anteriores, `cp -X`, `dot_clean`, verificador sobre la SD (`OK`),
+   hashes contra el kit. Batería fuera unos segundos antes de encender.
+2. Encender y esperar "Script / Run…".
+3. Cuatro fotos, esperando el guardado de cada una y mirando la revisión: horizontal nivelada,
+   horizontal en picado al escritorio, vertical con el disparador arriba, vertical con el disparador abajo.
+4. Esperado en los `.LOG`:
+   - `P8.LOG`: `VERIFY: 0`, `VERIFY: 1`, `VERIFY: 0`.
+   - `EET.LOG`: `VERIFY: 4472856`. `EETV.LOG`: once líneas `VERIFY: 4472856`.
+   - `ORI.LOG`: `VERIFY: 257` y `VERIFY: 1`. Variante válida: `VERIFY: 256` y `VERIFY: 0`.
+5. Esperado en las fotos: las cuatro de 4288×3216 (la escena de las dos verticales queda acostada, como
+   en el RAW), la revisión sin girar, y un `101O####.RAW` de 14.100.480 B por foto.
+6. Cómo leer un resultado distinto:
+   - `ORI.LOG` con una sola línea: la palabra no era 257 ni 256 y ORI no escribió. Si la línea es `1` o
+     `0`, ORI ya estaba aplicado (la RAM no se reinició): batería fuera y repetir. Otro número: anotarlo.
+   - `ORI.LOG` con `256` y nada más, y la cámara congelada: falló la rama del `IF` falso, que corre por
+     primera vez. Batería y SD fuera; nada queda escrito en la cámara.
+   - Log completo y alguna foto de 3216×4288: la lectura no pasa por `0xf02a0`; guardar la SD tal cual.
+   - Cámara congelada al encender: batería y SD fuera, quitar ORI de `BatchScripts.txt`.
+
+### 8c — M4L + ORI (revisión del modo 4 por la rama sin giro)
+En `Batch/` sólo `M4L.srt`, `ORI.srt` y `BatchScripts.txt` (copia de `fase1/Batch/BatchScripts_ORIM4L.txt`).
+`M4L.LOG`: `8`, `30757`, `3`, `28712`, `4`. `ORI.LOG` como en 8b. Esperado: JPG de 4288×3216 y RAW lineal de
+12 bits. Anotar cómo sale la revisión: hasta ahora todas las revisiones de modo 4 pasaron por la rama con giro.
+
+Para deshacer ORI: apagar. El ajuste "Sensor de orientación" del menú queda como estaba.
+
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los
 `*.log` del intérprete), `TP$BATCH` y `TEMP.SRT` si aparecen en la raíz, y los `._*`, `.fseventsd`,

@@ -1088,3 +1088,112 @@ y pendiente 1,13–1,17 contra el JPG de la cámara) y con 1981 y 1982 de P9. `t
 - Aparte: con cualquier kit de scripts **todas** las fotos salen en vertical (3216×4288, etiqueta 1),
   también las tomadas en horizontal, en el JPG y en la revisión; las de fábrica salen horizontales
   (499 de 4288×3216 y 155 de 3216×4288 en `dump/sd_original`). En análisis aparte.
+
+## 2026-11-12 — Fotos horizontales guardadas en vertical: lo decide el sensor de orientación; script ORI
+
+Análisis estático (`firmware/stock/rec0_code_0x48000.bin`, `work/code_full.s`, `dump/ram_snapshot.bin`)
+más los archivos de `dump/`. Sin cámara: ORI no corrió todavía.
+
+**Resumen**
+- El giro lo decide, en cada disparo, la lectura del sensor de orientación. Ningún script del kit, ni
+  SaveCFAonTake, ni el cambio de modo, ni el arranque por `B:\Batch` escriben nada de esa cadena: los
+  cuatro candidatos de software quedan descartados por código.
+- Lo que sigue abierto es por qué el sensor contesta "vertical" en las tomas de prueba. Hay dos
+  explicaciones y los archivos disponibles no las separan (ver "Inferido").
+- `ORI` deja la función lectora del firmware devolviendo siempre 0 ("cámara horizontal"), que es el valor
+  que devuelve en cada foto horizontal desde que la cámara salió de fábrica. Efecto: JPG y revisión sin
+  girar en todos los kits. Costo: las fotos tomadas en vertical tampoco se giran (quedan como el RAW).
+
+**Medido con archivos**
+- Los 35 JPG tomados con scripts (1970–2009) miden 3216×4288 con etiqueta de orientación 1.
+- En los 20 pares con RAW (1970, 1971, 1983–1986, 1988, 1989, 1994–2005), el JPG es el RAW girado 90°
+  en sentido antihorario (`np.rot90(raw, 1)`): correlación 0,89–0,97; con el giro contrario, −0,27 a 0,41.
+  El giro es **el mismo en todas**, con la cámara horizontal o vertical.
+- Por el contenido: en 2003, 2004, 2005 y 2007 la escena queda derecha (cámara vertical, giro correcto).
+  En 30 la escena queda acostada (cámara horizontal, giro de más). La 2009 no tiene referencia clara.
+- Las 30 acostadas son tomas en picado hacia el escritorio (teclado, macropad vistos desde arriba). Las
+  cuatro derechas se tomaron con la cámara casi nivelada, mirando al frente.
+- M4N (2006–2009) no llama a SaveCFAonTake y gira igual. P8 solo (1970, 1971, 1985, 1986) deja el modo 0 y
+  gira igual. P6/P9 (1972–1982) también.
+- Fábrica (`dump/sd_original`): la última foto horizontal es la 1960 (2024-06-29). Las dos siguientes,
+  1961 y 1963 (2025-11-18), miden 3216×4288 y muestran la escena derecha: se tomaron en vertical.
+  **No existe ninguna foto horizontal y nivelada posterior a junio de 2024**, con scripts o sin ellos.
+  Las 1964–1967 (pruebas 1–3, con los scripts cargados y sin ejecutar) no quedaron guardadas en `dump/`.
+- Corrección a la sección "La revisión tras el disparo": donde dice que todas las fotos de prueba de modo 4
+  "están en vertical", las fotos se tomaron en horizontal y la cámara las giró. Y en la prueba de M4L
+  horizontal/vertical (`dump/raw15`) las dos posiciones pasaron por la misma rama de giro: la rama sin
+  giro de la revisión en modo 4 sigue sin probarse. Con ORI cargado se puede probar.
+
+**Leído en el código**
+1. *Variable de la decisión.* Byte `ctx+0x2c` de la cabecera de la captura. Lo escribe `0x127a2a` dentro
+   de `0x127978` (llamada desde la captura en `0x1270c2`); la segunda variante de captura hace lo mismo
+   en `0x127cc8`. Valores: 0 = sin giro; 1 y 2 = giro de píxeles (ajuste "Sensor de orientación" en
+   Activado); 3 y 4 = con el ajuste en otro valor ("En transferencia": el texto de ayuda en `0x4a2680`
+   dice que la foto se muestra sin girar y se gira al transferir).
+2. *Quién lo usa.* `0x128022` (montaje del IRP de la foto): con 1 o 2 intercambia ancho y alto de la
+   salida (`ctx+0x64`/`ctx+0x66`); con cualquier otro valor los deja como están. `0xf0b70` y `0xf0e0c`
+   pasan el mismo byte a `0xf117c` (revisión). `0x12951c` lo copia a la estructura del archivo.
+3. *Lector del sensor* `0xf02a0`. Base `0x3da998` (literal en `0xf032c`). Devuelve 0 sin tocar el
+   hardware si `[0x3da998] == 0` (sensor sin alimentar) o si `[0x3da999] == 0` (sensor deshabilitado):
+   `0xf02b6–0xf02c5`, las dos ramas van a `0xf036a` = `mov_s r0,0`. Si no, espera hasta 5 ms desde el
+   encendido y lee el puerto `0x0ff04034`: bit 7 → 1; si no, bit 5 → 2; ninguno → 0.
+   `0xf0228` enciende el sensor (bit 13 de `0x0ff04000`) y pone `[0x3da998] = 1`; `0xf0270` lo apaga y
+   pone 0. `[0x3da999]` sólo lo escribe `0xf0378`, que no tiene ninguna llamada ni puntero en el
+   firmware: es una constante de la sección de datos. En la RAM volcada los dos bytes valen 1.
+4. *Ajuste del menú.* Byte `0x3d9a81` (0 Activado, 2 Desactivado), getter `0x75ad0`, setter `0x75adc`.
+   Lo escriben la carga de parámetros (`0x4ce6c`, `0x66c42`), los menús (`0x1e4ad4`, `0x1e4e5a`,
+   `0x2394ec`, `0x2c0146`) y el comando de script `OrientationSensor` (`0x2d756c`), que ningún kit usa.
+5. *Secuencia en la captura* (`0x126f20`): si el ajuste ≠ 2, `0xf0228` (`0x126f60`); exposición;
+   `0x127978` lee el sensor (`0x12799c`); si el ajuste ≠ 2, `0xf0270` (`0x1270d4`). El archivo RAW se
+   escribe después (`0x1271e8`), con el sensor ya apagado: SaveCFAonTake no cambia ni el momento ni el
+   resultado de la lectura.
+6. *Qué escriben los kits.* `SaveCFAonTake` (`0x1b0654`): sólo el byte `0x3df0e4`. Cambio de modo
+   (`0x6e0b0`): sólo la palabra `0x3d97a8`. EE0/EET: 11 literales de código en `0x1b3d80–0x1b4b68`.
+   M4L/M4R/M4N: `0x1286e0` y `0x122780`. Las demás llamadas son lecturas. Las direcciones `0x3d9a81`,
+   `0x3da998` y `0x3da999` sólo aparecen como literal en las funciones de los puntos 3 y 4.
+
+**Inferido, sin prueba**
+- El sensor contesta 1 o 2 (siempre el mismo valor) en las tomas horizontales de prueba. Explicaciones:
+  a) *Picado.* Las 30 tomas giradas de más apuntan hacia abajo. Un sensor de inclinación de dos salidas
+     pierde la referencia cuando el objetivo mira al suelo y puede quedarse en la posición "vertical".
+     Las fotos de fábrica horizontales son, en su mayoría, tomas niveladas.
+  b) *Sensor atascado* en una posición desde algún momento posterior a junio de 2024 (la cámara pasó
+     más de un año guardada). Predice que una toma horizontal nivelada también sale girada.
+- Prueba que las separa, sin scripts (SD sin `Batch/`, o con el kit actual: da lo mismo según el código):
+  una foto horizontal nivelada mirando al frente y otra horizontal en picado al escritorio. Nivelada
+  4288×3216 y picada 3216×4288 → (a). Las dos 3216×4288 → (b).
+- El valor inicial de `[0x3da998]` es 1: en la RAM volcada vale 1 y el sello de tiempo que `0xf0228`
+  guarda al lado (`0x3da99c–0x3da9a3`) está en cero, o sea que nadie lo llamó desde el arranque.
+
+**Script `ORI`** (`sd_kit/fase3/Batch/ORI.srt`, copia idéntica en `fase1/Batch`)
+- Lee con `peek16` la palabra `0x3da998` (byte bajo = alimentado, byte alto = habilitado) y la anota.
+  Si vale 257 (`0x0101`) escribe 1 con `poke16`; si vale 256 (`0x0100`) escribe 0. En los dos casos el
+  byte bajo queda como estaba y el alto pasa a 0. Relee y anota. Con cualquier otro valor termina sin
+  escribir. Es el único byte que cambia; se pierde al apagar.
+- Por qué es seguro, por código: (1) el byte alto sólo lo lee `0xf02a0` y nadie lo escribe; (2) con ese
+  byte en 0 la función sale por la misma rama que usa cuando el sensor está apagado y devuelve 0, el
+  mismo valor que devuelve en toda foto horizontal; (3) sus llamadores (`0x51524`, `0x12799c`,
+  `0x127cc8`, `0x13e2f4`, `0x1e05f2`, `0x1e1aee`, más la pantalla de prueba `0x1f5cf0`) ya manejan el 0;
+  (4) el encendido y apagado del sensor siguen igual; (5) es un dato, no código: no intervienen las
+  cachés de instrucciones; (6) `peek16`/`poke16` ya corrieron en la cámara con M4L.
+- `IF` falso: la rama "condición falsa sin ELSE" de `0x107578` (`0x10763c–0x107650`) libera los búferes
+  y sigue en la línea siguiente. Es la rama de la que depende el corte por guardia de todos los scripts
+  y **no corrió todavía en la cámara** (todas las guardias dieron cierto). ORI la usa si la palabra vale 256.
+- Composición: no comparte direcciones con ningún otro script; va al final de la lista. Listas de prueba:
+  `fase3/Batch/BatchScripts_ORI.txt` (P8, EET, EETV, ORI) y `fase1/Batch/BatchScripts_ORIM4L.txt` (M4L, ORI).
+- `tools/e2e_scripts.py`, 41 casos (F13–F15): la dirección de ORI contra el literal de `0xf032c`, la
+  compuerta contra las instrucciones de fábrica, y ORI ejecutado en un intérprete mínimo con ocho estados
+  iniciales (dos escriben, seis no), con dos scripts mutados de control.
+
+**Riesgo que queda**
+- Las fotos verticales dejan de girarse en la cámara (JPG y revisión en la orientación del sensor, igual
+  que el RAW). El ajuste del menú no cambia; al apagar vuelve el comportamiento de fábrica.
+- Entre la lectura y la escritura de ORI pasan unos milisegundos; si en ese hueco otra tarea cambiara el
+  byte bajo, ORI lo devolvería al valor leído. Consecuencia máxima: el sensor queda alimentado hasta el
+  siguiente disparo. Durante "Script / Run…" no hay captura en curso.
+- Si la palabra no vale 257 ni 256 al arrancar, ORI no hace nada y el `.LOG` trae un solo número.
+- Alternativa sin script: Menu → Setup → Sensor de orientación → Desactivado. Persiste en la
+  cámara. Por código no garantiza el 0: con el ajuste en 2 la captura no enciende el sensor, pero
+  `0xf02a0` lee igual mientras `[0x3da998]` siga en 1, y un 1 o 2 con el ajuste ≠ 0 da 3 o 4.
+
+Procedimiento: `sd_kit/PASOS.md`, paso 8.
