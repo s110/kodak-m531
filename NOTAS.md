@@ -973,3 +973,13 @@ parche actuó: máximo del RAW por encima de 1020.
    al del modo 3 pero empaquetado; el JPG saldría con velo, porque el IRP no resta el negro (~110).
 
 Procedimiento y registros esperados: `sd_kit/PASOS.md`, paso 7.
+
+## 2026-11-12 — M3V probado en la cámara (y corrección del usuario)
+
+- `M3V.LOG` exacto: `252054531`, `235211523`, `151391235`, `50662147`, `3`. Dos fotos (1992, 1993) sin
+  cuelgue; RAW u16 de 12 bits correctos (máx 3732/3332, sin filas vacías), sin JPG. `dump/raw12`.
+- **Corrección del usuario:** la pantalla en vivo **siempre se vio bien**, en todos los kits. Lo que sale
+  rojo/verde con ruido es sólo la **revisión** tras el disparo. La premisa de M3V ("vista en vivo con
+  ruido") era falsa: devolver `0x1286dc[3]` a `03` no cambió nada visible y tampoco reabrió el cuelgue,
+  así que el arreglo del cuelgue lo da sólo `0x128344[3]` (formato del IRP de la foto).
+- Lo que sí falta es la revisión y el JPG: es el objetivo de M4L.
