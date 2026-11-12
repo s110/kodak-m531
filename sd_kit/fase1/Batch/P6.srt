@@ -1,0 +1,9 @@
+10 REM P6: activa RAW de 12 bits y deja los valores en P6.LOG
+20 LET a = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
+30 LOG_PRINT 1 a
+40 FOREIGN Take12BitCCDRaw(1)
+50 LET b = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4059364, 0, 0, 0, 0, 0)
+60 LOG_PRINT 1 b
+70 LET c = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4046332, 0, 0, 0, 0, 0)
+80 LOG_PRINT TRUE c
+90 END
