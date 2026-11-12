@@ -53,15 +53,37 @@ scripts: sin `Batch/`). A1 y E1 escriben dos archivos cada una: en total vuelven
 3. `Batch/EE0.LOG` debe decir `VERIFY: 4473808` y luego `VERIFY: 4472856`.
 4. Si la cámara se congela al encender: sacar batería y SD, quitar EE0 de `BatchScripts.txt`.
    EE0 es el primer script con `IF` y con `poke32` que corre en la cámara.
+5. Todas las bandas de ISO: `BatchScripts.txt` = contenido de `fase3/Batch/BatchScripts_EET.txt`
+   (P8, EET, EETV) más los tres `.srt`. Esperado: `EET.LOG` con una línea `VERIFY: 4472856` y
+   `EETV.LOG` con once. Foto sin flash con ISO ≥ 160, contra una con P8 solo de la misma escena.
+   Antes de copiar: `python3 -I tools/e2e_scripts.py` (16 casos) además del verificador.
 
-## Paso 6 — Modo 3 sin cuelgue (experimental, después de que EE0 funcione)
-1. `fase1/Batch/M3F2.srt` no está en ningún `BatchScripts.txt`. Para probarlo: `BatchScripts.txt`
-   con una sola línea `M3F2`, más `M3F2.srt`; verificador sobre la carpeta y sobre la copia en la SD.
-2. Encender, tomar tres fotos seguidas esperando a que termine de guardar cada una.
-3. Esperado: `101O####.RAW` de 28.200.960 B en cada foto, JPG y revisión con ruido, sin cuelgue.
-   `Batch/M3F2.LOG`: `252054531`, `235211523`, `151391235`, `134548227`, `3`.
-4. Si sólo aparecen una o dos líneas, la guardia no dejó escribir (firmware distinto). Si la cámara
-   se congela: batería y SD fuera; traer la SD con lo que haya quedado. Detalle en NOTAS.md.
+## Paso 6 — Modo 3 sin cuelgue (experimental; EE0 ya corrió, así que se puede probar)
+Requisitos: batería cargada, mismos ajustes de la cámara que en las fotos de modo 4 (P9), y ninguna
+otra prueba en la misma sesión (M3F2 va **solo**).
+1. Claude deja en `Batch/` de la SD **sólo** dos archivos: `M3F2.srt` y `BatchScripts.txt`, este
+   último copiado de `fase1/Batch/BatchScripts_M3F2.txt` (una línea `M3F2`, CRLF). Borra de `Batch/`
+   los `.LOG` y `.srt` anteriores. Copia con `cp -X`, `dot_clean`, verificador sobre la copia en la
+   SD (debe decir `OK`) y comparación de hashes con el kit.
+2. Enciende. Espera a que termine "Script / Run…".
+3. Toma **una** foto de una escena normal y espera a que termine de guardar (vuelve la vista en
+   vivo; deja pasar además unos 10 s: son dos archivos grandes). No dispares mientras guarda: una captura con la
+   anterior en proceso tomaría la ranura 1 del pool 8, que queda fuera de la SDRAM.
+4. Si la cámara sigue respondiendo, toma la segunda (la que colgaba sin el arreglo) y espera;
+   después la tercera. Apaga con el botón y trae la SD.
+5. Esperado en `Batch/M3F2.LOG`, entre las líneas "starts here" y "ends here":
+   `VERIFY: 252054531`, `VERIFY: 235211523`, `VERIFY: 151391235`, `VERIFY: 134548227`, `VERIFY: 3`.
+   Por foto: `101O####.RAW` de 28.200.960 B (16 bits, 12 útiles) y un JPG **con ruido** de tamaño
+   normal (no de 224 B); la revisión en pantalla también se ve como ruido.
+6. Cómo leer un resultado distinto:
+   - Una o dos líneas `VERIFY` y la cámara normal (RAW no aparece): una guardia no coincidió y el
+     script terminó sin escribir nada. Si la primera línea es `151391235`, la tabla ya estaba
+     parcheada (la RAM no se reinició): sacar la batería unos segundos y repetir.
+   - Tres o cuatro líneas y sin `VERIFY: 3`: la relectura no coincidió; el modo quedó en 0.
+   - JPG de 224 B: el IRP siguió rechazando la foto; abrirlo como texto y anotar `IRPTask[...]`.
+   - La cámara se congela (al encender o tras una foto): batería y SD fuera, traer la SD tal como
+     quedó. Nada queda escrito en la cámara. Para volver a usarla, quitar `Batch/` de la SD.
+7. Al terminar, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS` y restaura el `Batch/` anterior.
 
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los

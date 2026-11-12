@@ -676,3 +676,68 @@ RAM y los archivos de `dump/raw1`. Sin cámara: lo que sigue separa lo leído de
   JPG hermano vacío o truncado.
 - El único error del verificador sobre la SD fue `._BatchScripts.txt` (metadatos de macOS al escribir
   con `printf >`); escribir en la SD con `cp -X` o borrar los `._*` antes de expulsar.
+
+## M3F2: revisión independiente antes de probarlo (Fable, 2026-11-12)
+
+Revisión del script contra `firmware/stock/rec0_code_0x48000.bin`, `dump/ram_snapshot.bin` y
+`work/code_full.s`. Sin cámara. Veredicto: el arreglo es coherente con el código y se puede probar;
+la causa del cuelgue sigue sin estar probada, así que la prueba es la que decide.
+
+**Comprobado**
+- Tablas: `0x128344` = `03 0c 06 0f 09` y `0x1286dc` = `03 0b 05 0e 08`, iguales en el firmware de
+  fábrica y en la RAM. Base de cada tabla = `pcl + 0xc` (`0x128338`, `0x1286d0`), destino = base +
+  2·byte. Modo 3: `0x128362` y `0x1286f8` (`mov_s r0,6`); modo 4: `0x128356` y `0x1286ec`
+  (`mov_s r0,2`). Cambiar el byte 3 a `09` / `08` lleva el modo 3 al bloque del modo 4.
+- Los cuatro bytes de cada palabra escrita (`0x128344–47`, `0x1286dc–df`) son las entradas 0–3 de la
+  tabla; la entrada 4 está en la palabra siguiente y no se toca. Las palabras nuevas `0x09060c03`
+  (151391235) y `0x08050b03` (134548227) conservan los otros tres bytes. Ninguna instrucción cambia.
+- Caché: las tablas se leen con `ldb.x` (carga de datos) y se escriben con `poke32` (almacenamiento
+  de datos): mismo camino que el literal de EE0 (`0x1b3d80`, también dentro de la sección de código),
+  que funcionó en la cámara. Una caché de instrucciones, si existe, no interviene porque no cambia
+  ningún byte ejecutable. No hace falta `dcache_flush_range`, y no usarlo evita estrenar una primitiva.
+- El modo (`0x3d97a8`) sólo se lee con `0x6e0d0`; no hay accesos directos (las cuatro coincidencias
+  de la búsqueda son `0x4d97a8`). Diez llamadores: las dos tablas; `0x12b4a0`, `0x12b536`, `0x12b628`
+  (distinguen modo 0 del resto: modos 3 y 4 reciben el mismo plan de búferes, 2 B por píxel);
+  `0x1290a0` (sólo modo 0); `0x128fa0`, `0x128fe4`, `0x12916e` (lado de la captura: con SaveCFAonTake
+  y modo 3 usa `0x1228f0` para las ganancias y pasa el modo a `0x17d77c`); `0x1b0ab6` (salida de una
+  pantalla de prueba, `0x1b08b4` exige `0x4c38c() == 3`).
+- El tamaño del RAW no sale de las tablas: `0x76680` lee `0x3da828`, que la captura (`0xe3d52`)
+  copia del modo. Con el parche el modo sigue siendo 3: el RAW sigue de 16 bits, 28.200.960 B.
+- `0x12b6ec` exige `ctx+0x8c` (entrada que pide el IRP; `0x2afaa8` la calcula: formato 2 →
+  ⌈ancho/8⌉·12·alto = 21.150.720) ≤ tamaño del RAW (28.200.960).
+  El IRP lee dentro del búfer.
+- Lo que el parche cambia respecto de la prueba 4 (modo 3 sin parche, dos RAW correctos) es sólo el
+  formato del IRP, y esa configuración del IRP es la del modo 4, que corrió en la cámara sin cuelgue.
+- Orden `SaveCFAonTake(1)` → setter de modo: el mismo de fábrica (`0x2d83c0` y `0x1f289c`) y el de
+  P9. Son dos escrituras independientes (`0x1b0654` escribe un byte, `0x6e0b0` una palabra).
+- Intérprete: el nombre de variable es una cadena validada carácter a carácter (`0x29bce8`: `_`,
+  dígitos, letras) y guardada en una lista enlazada con memoria dinámica (`0x198f78`), sin tope de
+  cantidad. Un operando se resuelve como cadena, `TRUE`/`FALSE` (palabra entera), entero (sólo
+  dígitos, `0x199770`), flotante (dígitos y un punto, `0x19978c`) o variable (`0x1990d0`). Las letras
+  `d`, `e` y `q` recorren las mismas instrucciones que `a`, `b`, `c`, `p` y `r`, ya probadas.
+  `SaveCFAonTake` es `void` y va sin asignar (así corrió en P8 y P9); las llamadas a
+  `Run_SpecifyFunc` (`int`) van todas asignadas.
+
+**Cambios en el script**
+- Antes: dos escrituras seguidas y después las dos relecturas. Ahora cada tabla hace escritura →
+  relectura → registro → guardia antes de tocar la siguiente; el primer tramo es la secuencia exacta
+  de EE0. Si la primera relectura no coincide, la segunda tabla queda intacta.
+- Las guardias cierran en falso: el camino normal sólo usa `IF` verdadero con salto (lo probado en
+  EE0); si un valor no coincide la línea siguiente es `END`, y si el intérprete fallara ahí la CPU se
+  detiene sin haber puesto el modo 3. Un parche a medias es inocuo: las entradas del modo 3 sólo se
+  usan con el modo 3, que se activa en la última línea útil.
+- `sd_kit/fase1/Batch/BatchScripts_M3F2.txt` (una línea, CRLF) para copiarlo a la SD como
+  `BatchScripts.txt`. `BatchScripts.txt` del kit sigue con P9 solo. El verificador no necesita cambios.
+
+**Riesgo que queda**
+- Que el cuelgue no dependa del rechazo del IRP. El script no lo empeora: sería el mismo cuelgue de
+  la prueba 4 (batería y SD fuera, nada escrito).
+- El IRP procesa palabras de 16 bits como si fueran 12 bits empaquetados: imagen de ruido de alta
+  frecuencia. No se leyó qué hace la tarea JPEG si el archivo comprimido supera su búfer; un error
+  ahí llevaría a la salida de error de la tarea (`0x15714c`), por un camino que no es el del modo 4.
+- Pool 8: el RAW de 28,2 MB ocupa el pool entero desde la ranura 0 (el de modo 4 ocupaba 21,15 MB).
+  No se encontró otro uso de la ranura 1 en un disparo aislado; un disparo con el anterior en
+  proceso iría a la ranura 1 y pasaría el final de la SDRAM. Por eso: una foto, esperar, la siguiente.
+- La rama falsa de `IF` (seguir en la línea siguiente) nunca corrió en la cámara.
+
+Procedimiento y registro esperado: `sd_kit/PASOS.md`, paso 6.
