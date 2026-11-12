@@ -385,7 +385,8 @@ PERFILES = {
     # modo 4: contenedor de 12 bits empaquetado (orden lsb medido), datos de 10 bits lineales con el negro
     # ya restado (máximo 1020 en las fotos 1972–1974). El JPG de este modo sale con el color corrido:
     # el balance no se toma de él.
-    21_150_720: dict(bits=12, ancho=4320, blanco=1023, negro=0, balance_jpg=False, neutro='modo4'),
+    21_150_720: dict(bits=12, ancho=4320, blanco=1023, negro=0, balance_jpg=False, neutro='modo4',
+                     decodificar10=True),
     17_625_600: dict(bits=10, ancho=4320),  # modo 2: 10 bits empaquetado
 }
 # Patrón medido: GBRG (verdes en (0,0)/(1,1), azul en (0,1), rojo en (1,0)). La heurística "R es el más
@@ -398,7 +399,7 @@ CFA_M531 = 'GBRG'
 NEUTRO_M531 = (0.7056, 1.0, 0.5292)
 # Modo 4: medido sobre una tecla casi blanca (fotos 1976/1977, luz de interior). Los canales llegan con
 # otras ganancias que en el modo 0. Provisional hasta tener el par modo 0 / modo 4 de la misma escena.
-NEUTRO_M531_MODO4 = (0.81, 1.0, 0.772)
+NEUTRO_M531_MODO4 = (0.62, 1.0, 0.60)  # pares con flash 1976↔1978 y 1977↔1979, tras decodificar con la curva de 10 bits
 CCM_M531 = np.array([[1.43013, -0.34631, -0.08382], [-0.2075, 1.54443, -0.33693], [0.22245, -1.20159, 1.97913]])
 # Tabla del firmware (0x429c4c y copia en 0x42a24c, idéntica a la de la C713): código de 8 bits del RAW
 # → valor lineal de 10 bits. El negro ya viene restado (mínimo 0). Justo antes está la tabla inversa.
@@ -442,6 +443,12 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
     campos = [a_imagen(d, packing, ancho) for d in datos]
     if decodificar:
         campos = [DECODE_M531[c] for c in campos]
+    if perfil and perfil.get('decodificar10'):
+        # Modo 4: la misma curva de compresión que el modo de 8 bits, con 10 bits de precisión
+        # (código10 ≈ 4·código8). Verificado con pares modo0/modo4 de la misma escena: tras decodificar,
+        # la relación entre modos pasa de pendiente log-log 0,68 a 0,89 y queda casi constante.
+        xs = np.arange(256) * 4.0
+        campos = [np.round(np.interp(c, xs, DECODE_M531.astype(np.float64))).astype(np.uint16) for c in campos]
     img, layout_usado = combinar(campos, layout)
     if img.shape[0] % 2:
         img = img[:-1]

@@ -374,3 +374,16 @@ Secciones anteriores que quedan superadas (no se reescriben para conservar el hi
   fotos; queda como balance fijo del modo 4 (`NEUTRO_M531_MODO4`). La madera sigue verdosa-amarilla con
   ambas matrices; la de la C713 da colores de teclas más fieles en este modo. Pendiente: la misma escena
   en modo 0 (P8, ya en la SD) para comparar contra el JPG bueno y ajustar matriz/balance del modo 4.
+
+## Modo 4 calibrado (2026-11-12, prueba 7 — pares modo 0 / modo 4)
+
+- Pares de la misma escena con flash (ISO 64, 1/30, f/3,1): 1976↔1978 y 1977↔1979; sin flash 1975↔1980.
+- **Los datos del modo 4 vienen comprimidos con la misma curva que el modo de 8 bits, pero con 10 bits
+  de precisión** (código10 ≈ 4·código8). Sin decodificar, la relación con el modo 0 tenía pendiente
+  log-log 0,68; con la curva, 0,89 y casi constante en medios y altos. Tras decodificar, los canales
+  coinciden con el modo 0 (R 0,94–0,99, B 1,02–1,06): mismos datos, más precisión.
+- Conversor: perfil 21.150.720 B decodifica con la curva de 10 bits; balance fijo del modo 4 =
+  (0,62, 1, 0,60) con flash. Resultado visual igual al JPG de la cámara
+  (`dump/raw5/modo4_decodificado.png`).
+- Conclusión práctica: **P9 (modo 4) da RAW de 10 bits efectivos, estable, sin cuelgues**; el JPG de
+  ese modo sale rosado (no importa si se usa el RAW). P8 (modo 0) da RAW de 8 bits + JPG correcto.
