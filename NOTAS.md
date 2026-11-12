@@ -983,3 +983,17 @@ Procedimiento y registros esperados: `sd_kit/PASOS.md`, paso 7.
   ruido") era falsa: devolver `0x1286dc[3]` a `03` no cambió nada visible y tampoco reabrió el cuelgue,
   así que el arreglo del cuelgue lo da sólo `0x128344[3]` (formato del IRP de la foto).
 - Lo que sí falta es la revisión y el JPG: es el objetivo de M4L.
+
+## 2026-11-12 — M4L probado: JPG correcto con RAW lineal de 12 bits; la revisión sale con ruido
+
+- `M4L.LOG` exacto: `8`, `30757`, `3`, `28712`, `4`. Primera vez que `peek16`/`poke16` y un parche de
+  instrucción (`0x122780` `or_s` → `mov_s`) corren en la cámara: funcionan, sin congelamiento.
+- RAW 1994/1995 (21.150.720 B, p12_lsb): máximo 3832/4095, mediana ~400, millones de píxeles > 1020.
+  **La curva quedó apagada: 12 bits lineales** (P9 se quedaba en 1020). `dump/raw13`.
+- **El JPG de la cámara sale correcto** (4288×3216, imagen reconocible, algo cálido por el AWB
+  por omisión del modo 4). Comparación en `dump/raw13/jpg_vs_raw_1994.png`.
+- La **revisión** tras el disparo sale con ruido. Hipótesis: `0x1286dc` no es la vista en vivo (que
+  siempre estuvo bien) sino el formato del IRP de la **revisión**; M4L puso la entrada del modo 4 en 3
+  (8 bits) y la revisión lee 12 bits como 8. M4R = M4L sin ese cambio, para probarlo.
+- Conversión de estos RAW: `m531raw.py dng ... --packing p12_lsb --width 4320 --cfa GBRG --black 0 --white 4095`
+  (el perfil automático de 21.150.720 B todavía asume la curva del modo 4 de fábrica).
