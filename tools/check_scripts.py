@@ -118,8 +118,17 @@ def revisar_srt(ruta):
     except UnicodeDecodeError:
         return [f'{ruta}: contiene caracteres no ASCII']
     numeros, saltos, variables, cuerpos = [], [], set(), []
+    # 0x10776c: las líneas numeradas se GUARDAN como programa; sólo una línea "RUN" sin número las
+    # ejecuta; "QUIT" termina el archivo; cualquier otra línea sin número (salvo REM) aborta.
+    inmediatas = [l.strip() for l in lineas if l.strip() and not re.match(r'\d', l.strip())]
+    if 'RUN' not in inmediatas:
+        errores.append(f'{ruta}: falta la línea "RUN" sin número: sin ella el programa se carga y no se ejecuta')
+    for x in inmediatas:
+        if x not in ('RUN', 'QUIT') and not re.match(r'REM( |$)', x):
+            errores.append(f'{ruta}: línea sin número no admitida: {x!r}')
+    numeradas = [l for l in lineas if l.strip() and re.match(r'\d', l.strip())]
     for n, l in enumerate(lineas, 1):
-        if not l.strip():
+        if not l.strip() or not re.match(r'\d', l.strip()):
             continue
         m = re.match(r'(\d+) (.*)$', l)
         if not m or (len(m.group(1)) > 1 and m.group(1).startswith('0')):
@@ -178,9 +187,8 @@ def revisar_srt(ruta):
     for n, destino in saltos:
         if destino not in numeros:
             errores.append(f'{ruta}:{n}: salto a la línea {destino}, que no existe')
-    ultima = [l for l in lineas if l.strip()]
-    if not ultima or not re.fullmatch(r'\d+ END\s*', ultima[-1]):
-        errores.append(f'{ruta}: la última línea debe ser END')
+    if not numeradas or not re.fullmatch(r'\d+ END\s*', numeradas[-1]):
+        errores.append(f'{ruta}: la última línea numerada debe ser END')
     return errores
 
 

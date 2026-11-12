@@ -11,3 +11,4 @@
 110 SYSTEM ScreenString(20, 200, "P5 != NO")
 120 SYSTEM delay_us(2000000)
 130 END
+RUN

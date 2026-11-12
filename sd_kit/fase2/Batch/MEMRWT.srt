@@ -9,3 +9,4 @@
 90 SYSTEM ScreenString(20, 200, "MEMRWT OK")
 100 SYSTEM delay_us(3000000)
 110 END
+RUN

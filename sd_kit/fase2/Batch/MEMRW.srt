@@ -15,3 +15,4 @@
 9000 SYSTEM ScreenString(20, 180, "MEMRW NO: otro firmware")
 9010 SYSTEM delay_us(3000000)
 9020 END
+RUN

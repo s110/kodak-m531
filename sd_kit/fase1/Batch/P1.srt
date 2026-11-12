@@ -2,3 +2,4 @@
 20 SYSTEM ScreenString(20, 20, "P1 OK")
 30 SYSTEM delay_us(1500000)
 40 END
+RUN

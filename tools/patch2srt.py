@@ -76,6 +76,7 @@ def generar(nombre, parches):
     L.append(f'9000 SYSTEM ScreenString(20, 180, "{nombre[:12]} NO: otro firmware")')
     L.append('9010 SYSTEM delay_us(3000000)')
     L.append('9020 END')
+    L.append('RUN')  # sin RUN el programa sólo se carga (0x10776c)
     return '\r\n'.join(L) + '\r\n'
 
 

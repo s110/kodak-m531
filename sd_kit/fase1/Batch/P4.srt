@@ -6,3 +6,4 @@
 60 SYSTEM ScreenInt32(20, 140, b)
 70 SYSTEM delay_us(3000000)
 80 END
+RUN

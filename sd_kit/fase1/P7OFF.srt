@@ -5,3 +5,4 @@
 50 GOTO 70
 60 LET r = FOREIGN Run_SpecifyFunc(3050116, 2, 0, 4807320, 69888, 0, 0, 0, 0)
 70 END
+RUN
