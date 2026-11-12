@@ -90,7 +90,7 @@ Análisis y predicciones: `../NOTAS.md`, sección "Pantalla, revisión y JPG cor
 Cada script va **solo**: en `Batch/` de la SD quedan únicamente `<nombre>.srt` y `BatchScripts.txt`
 (copia de `fase1/Batch/BatchScripts_<nombre>.txt`). Preparación igual que en el paso 6.1: borrar
 `.LOG` y `.srt` anteriores, `cp -X`, `dot_clean`, verificador sobre la SD (`OK`), hashes contra el
-kit. Antes: `python3 -I tools/e2e_scripts.py` (26 casos). Quickview de la cámara en **On**.
+kit. Antes: `python3 -I tools/e2e_scripts.py` (32 casos). Quickview de la cámara en **On**.
 Entre un script y otro: apagar y sacar la batería unos segundos. Una foto por vez, esperando el guardado.
 
 ### 7a — M3V (modo 3; sólo primitivas ya probadas)
@@ -111,7 +111,7 @@ Entre un script y otro: apagar y sacar la batería unos segundos. Una foto por v
 3. `Batch/M4L.LOG`: `VERIFY: 8`, `VERIFY: 30757`, `VERIFY: 3`, `VERIFY: 28712`, `VERIFY: 4`.
 4. Esperado por foto: revisión en pantalla normal, JPG normal (sin tinte rosado) y `101O####.RAW`
    de 21.150.720 B con 12 bits lineales (máximo por encima de 1020; hasta 4095 en zonas quemadas).
-   Convertir con `tools/m531raw.py dng … --packing p12_lsb --width 4320 --cfa GBRG --black 0 --white 4095`.
+   Convertir con `tools/m531raw.py dng 101O####.RAW -o salida.dng` (detecta solo el modo lineal).
 5. Cómo leer un resultado distinto:
    - Cámara congelada al encender: batería y SD fuera. `M4L.LOG` vacío o sin `VERIFY`: falló la
      primera llamada a `peek16`. Nada queda escrito en la cámara.
@@ -130,6 +130,23 @@ Sólo si 7b no da un JPG correcto.
 3. Esperado por foto: revisión y JPG con imagen correcta y medios algo más oscuros que en modo 0;
    `101O####.RAW` de 17.625.600 B (10 bits empaquetados, mismos datos que el modo 4).
 4. JPG de 224 B o cuelgue: el modo 2 no es utilizable; batería y SD fuera, traer la SD.
+
+### 7d — Diagnóstico de la revisión con ruido (M4L y M4R ya probados: JPG y RAW correctos, revisión con ruido)
+No hay script de arreglo (`M4Q`): la causa no está leída en el código (ver `../NOTAS.md`, última sección).
+Estas tres pruebas la acotan. Antes: `python3 -I tools/e2e_scripts.py` (32 casos). Quickview en **On**.
+1. **Orientación, con M4L tal como está en la SD.** Encender, esperar "Script / Run…". Foto 1 con la
+   cámara **horizontal**; mirar la revisión. Foto 2 en vertical; mirar la revisión. Anotar cuál sale
+   con ruido. `M4L.LOG`: `8`, `30757`, `3`, `28712`, `4`.
+2. **M4N (M4R sin SaveCFAonTake).** En `Batch/` sólo `M4N.srt` y `BatchScripts.txt` (copia de
+   `BatchScripts_M4N.txt`); preparación como en 6.1. Batería fuera unos segundos antes. Dos fotos, una
+   horizontal y una vertical. `M4N.LOG`: `VERIFY: 30757`, `VERIFY: 28712`, `VERIFY: 4`.
+   Esperado: JPG correcto y **ningún** `101O####.RAW`. Anotar cómo sale la revisión.
+   El modo 4 sin SaveCFAonTake no corrió antes en la cámara: si se congela, batería y SD fuera.
+3. **P8 en vertical.** Kit P8 (modo 0 con RAW): una foto vertical; la revisión debe verse bien.
+4. Lectura: horizontal bien y vertical mal → rama de orientación de la revisión. M4N bien → la revisión
+   depende del guardado del RAW. Todo con ruido salvo P8 → depende sólo del modo (puntero `ctx+8`).
+5. Los RAW de M4L/M4R se convierten ya sin parámetros: `tools/m531raw.py dng 101O####.RAW -o salida.dng`
+   (`"modo4": "lineal12"`, blanco 4095).
 
 Al terminar cada tramo, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS`.
 

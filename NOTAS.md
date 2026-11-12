@@ -997,3 +997,81 @@ Procedimiento y registros esperados: `sd_kit/PASOS.md`, paso 7.
   (8 bits) y la revisión lee 12 bits como 8. M4R = M4L sin ese cambio, para probarlo.
 - Conversión de estos RAW: `m531raw.py dng ... --packing p12_lsb --width 4320 --cfa GBRG --black 0 --white 4095`
   (el perfil automático de 21.150.720 B todavía asume la curva del modo 4 de fábrica).
+
+## 2026-11-12 — La revisión tras el disparo: qué la produce, qué quedó descartado, y M4R medido
+
+Análisis estático (`work/code_full.s`, Ghidra, `dump/ram_snapshot.bin`) más las fotos de `dump/raw13`
+y `dump/raw14`. **La causa del ruido de la revisión sigue sin identificar.** Por eso no existe `M4Q`:
+un parche de código sin causa leída es una apuesta, y un error en un script detiene la CPU.
+
+**Medido con archivos de la cámara**
+- `dump/raw14` (M4R, fotos 1996–2001): los seis JPG son **correctos**, igual que los de M4L. Los seis RAW
+  son lineales de 12 bits (máximos 4078–4095). El cambio de `0x1286e0` (8 → 3) que M4L hace y M4R omite
+  **no influye en el JPG, ni en el RAW, ni en la revisión**.
+- Cada JPG de M4L y M4R lleva dentro tres imágenes: miniatura EXIF de 160×120, imagen intermedia de
+  360×480 y la foto de 3216×4288. **Las tres son correctas** (la intermedia correlaciona 0,999 con la
+  foto reducida). Las imágenes pequeñas que salen del IRP están bien; el fallo de la revisión queda
+  después del IRP.
+- Todas las fotos de prueba de modo 4 (raw3, raw6, raw13, raw14) están en **vertical**: la cámara guardó
+  el JPG girado (3216×4288). Ninguna prueba de revisión en modo 4 se hizo con la cámara horizontal.
+- Los RAW guardados no llevan rastro del área de trabajo de la revisión (bytes `0x300000–0x396000` con la
+  misma estadística que el resto): el archivo se escribe antes de que la revisión use esa memoria.
+
+**Leído en el código**
+1. *Gancho de revisión.* `0xf0d14` se registra con `0x129a98` en `0x3dbdb4` y lo llama `0x129ba0` desde
+   la etapa de procesado (`0x1c043a` para imágenes de hasta 4095 px de ancho, `0x1c065e` para las más
+   anchas, que es el caso de la foto de 4288). Recibe la cabecera de la captura (`ctx`) y una
+   estructura de 0x34 B con el búfer de la imagen pequeña.
+2. *Origen de la imagen de revisión.* Antes de llamar al gancho, la etapa reduce la salida YUV del IRP con
+   `0x12a52c` hacia `param+0x60` (tamaño `param+0x5c/0x5e` = `ctx+0x17e/0x180`). El búfer lo coloca
+   `0x1becd4` dentro del búfer de salida, detrás de las franjas YUV y del búfer de `param+0x44`. En la
+   foto ancha esa reducción sale de una primera pasada del IRP (`0x1bc528` tipo 2: cuatro cuadrantes con
+   `0x2b0d8c`/`0x2b1098`) y la foto grande de una segunda pasada (tipo 1). Las dos usan la misma
+   estructura del IRP, con el mismo formato de entrada (`0x128344`).
+3. *Presentación.* `0xf0e7c` usa **el propio búfer del RAW** (`ctx+4`) como área de trabajo: `raw+0`
+   (3 MB, destino de `0xdc9d4`), `raw+0x300000` (lienzo de 640×480) y `raw+0x34b000` (copia de la imagen
+   pequeña). `0xf117c` centra la imagen en el lienzo según `ctx+0x2c` (1–2 o 3–4, por orientación) y
+   llama a `0xdc9d4`. En el caso habitual el dibujo lo hace después `0xf0ad8`, como trabajo diferido.
+4. *Lectores del modo de captura* (`0x6e0d0`, diez llamadas): las dos tablas de formato (`0x128330`,
+   `0x1286c6`), la captura (`0x128fa0`, `0x128fe4`, `0x1290a0`, `0x12916e`), el guardado (`0x1b0ab6`) y
+   **la disposición de la cabecera** (`0x12b4a0`, `0x12b536`, `0x12b628`): `ctx+8 = raw + N·(ancho·alto
+   redondeado a 1 KB)`, con N = 1 en modo 0 y N = 2 en los demás.
+5. *Mapa de memoria* (tabla de pools en `0x3e7c40`, leída del volcado de RAM): el pool 8 (RAW) ocupa
+   `0x0213e000–0x03c23000` = 28.200.960 B exactos, y el RAW empieza en `+0x5800`. En modo ≠ 0,
+   `ctx+8` = `0x03c28800`: **cae fuera del pool 8**, sobre memoria de otros pools (`0x03c23000` en
+   adelante). En modo 0 cae dentro (`raw + 14,1 MB`). Los búferes propios de la revisión (pool `0x45`,
+   640×480, en `0x005afc00`; pool `0x44`, 640×480×1,5, en `0x020bd000`) quedan fuera del RAW en todos los modos.
+6. *Guardado del RAW.* `0x12701c` lo escribe con `0x1b066c` (sufijo `O`, tamaño de `0x76680`) al volver
+   de la captura; `0x1b0754`, que sólo corre con SaveCFAonTake, cambia el bit bajo de 32 bytes del RAW
+   (marca) y nada más. `0x1289a8` (cuatro planos de depuración) sólo corre en modo 0.
+
+**Descartado**
+- Que la revisión dependa de `0x1286dc`/`0x1286e0`: M4L y M4R dan la misma revisión y los mismos JPG.
+- Que la revisión se decodifique del JPG guardado o de su miniatura: sale de la reducción YUV del punto 2.
+- Que la revisión lea el RAW como si fuera YUV por un formato propio: no hay segunda tabla de formato en
+  ese camino, y la imagen pequeña que produce el IRP es correcta (está dentro del JPG).
+- Que el archivo RAW se dañe por la revisión.
+
+**Inferido, sin prueba**
+- El candidato con más apoyo es el punto 5: una imagen de 640×480 que el código coloca en `ctx+8` queda,
+  en modo ≠ 0, fuera del pool del RAW y sobre memoria ajena. `0x12754e` usa `ctx+8` como búfer de imagen
+  de 640×480. Falta leer si el camino normal de la revisión (`0xf0ad8` → `0xdc9d4` → `0x186694`) pasa por
+  `ctx+8`; en `0xf0d14` y `0xf0e7c` sólo aparece `ctx+4`.
+- Segundo candidato: la rama de orientación de `0xf117c`. En modo 0 el usuario vio revisiones buenas, pero
+  no consta que fueran en vertical.
+- Un arreglo por `ctx+8` pediría cambiar la cuenta de `0x12b536` (N = 2 → 1,5), o sea instrucciones de una
+  función que corre en cada disparo, y además comprobar quién más usa ese puntero. Sin esa lectura, no se escribe.
+
+**Pruebas que separan los candidatos** (ninguna toca código nuevo en la cámara; pasos en `sd_kit/PASOS.md`, 7d)
+1. Con M4L (ya en la SD): una foto con la cámara **horizontal** y otra en vertical. Si la horizontal se
+   revisa bien, el fallo está en la rama de orientación y no en el modo.
+2. `M4N` = M4R sin SaveCFAonTake (modo 4 lineal sin archivo RAW). Si la revisión sale bien, depende del
+   guardado del RAW; si sale igual, depende sólo del modo (apoya el punto 5).
+3. P8 (modo 0 con RAW) en vertical: confirma que el modo 0 revisa bien en la misma orientación.
+
+**Conversor.** `tools/m531raw.py` separa solo los dos archivos de 21.150.720 B: máximo > 1020 → lineal de
+12 bits (negro 0, blanco 4095, sin curva); máximo ≤ 1020 → curva de fábrica (P9), como antes. Una toma de
+M4L sin nada por encima de un cuarto de escala se tomaría por comprimida: para ésa, los parámetros a mano.
+`tools/e2e_raw.py` lo comprueba con 1994, 1995, 1996 y 2001 (mosaico idéntico al archivo, correlación 0,993
+y pendiente 1,13–1,17 contra el JPG de la cámara) y con 1981 y 1982 de P9. `tools/e2e_scripts.py`: 32 casos
+(entran M4R y M4N).

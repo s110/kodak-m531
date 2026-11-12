@@ -423,6 +423,11 @@ PERFILES = {
 # Patrón medido: GBRG (verdes en (0,0)/(1,1), azul en (0,1), rojo en (1,0)). La heurística "R es el más
 # oscuro" daba GRBG; el ajuste RAW↔JPG de las fotos 1970/1971 lo corrigió (matriz diagonal con GBRG).
 CFA_M531 = 'GBRG'
+# Modo 4 de fábrica (P9): código de 10 bits con tope 0x3fc = 1020 (curva de captura, 0x1b0250). Con la
+# curva apagada (M4L/M4R) el mismo archivo de 21.150.720 B lleva 12 bits lineales y pasa de 1020 en
+# cuanto la escena tiene algo por encima de un cuarto de la escala. Una toma de M4L sin nada tan claro
+# se tomaría por comprimida: en ese caso pasar --packing p12_lsb --width 4320 --black 0 --white 4095.
+MAX_CODIGO_MODO4 = 1020
 # CCM_M531 (más abajo): cámara balanceada → sRGB lineal, filas suman 1. Ajustada con las cinco fotos de
 # modo 0 (1970, 1971, 1978–1980) por tools/ajustar_ccm.py (Huber, curva de tono por foto); dejando una
 # escena fuera da ΔE2000 medio 2,92 contra 3,32 de la anterior (1970/1971) y 3,35 de la C713; detalle en
@@ -483,7 +488,14 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
     campos = [a_imagen(d, packing, ancho) for d in datos]
     if decodificar:
         campos = [DECODE_M531[c] for c in campos]
-    if perfil and perfil.get('decodificar10'):
+    max_crudo = int(max(int(c.max()) for c in campos))
+    lineal12 = bool(perfil and perfil.get('decodificar10') and max_crudo > MAX_CODIGO_MODO4)
+    if lineal12:
+        # M4L/M4R: la curva de captura está apagada y el contenedor lleva 12 bits lineales con el negro
+        # restado. La curva de fábrica no puede dar un código mayor que 1020, así que un solo valor por
+        # encima lo delata. No se decodifica; el blanco pasa a 4095.
+        perfil_info = dict(perfil, blanco=4095, negro=0)
+    elif perfil and perfil.get('decodificar10'):
         # Modo 4: la misma curva de compresión que el modo de 8 bits, con 10 bits de precisión
         # (código10 ≈ 4·código8). Verificado con pares modo0/modo4 de la misma escena: tras decodificar,
         # la relación entre modos pasa de pendiente log-log 0,68 a 0,89 y queda casi constante.
@@ -499,7 +511,8 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
                 cfa=cfa or cfa_det, cfa_detectado=cfa_det,
                 cfa_rb_provisional=cfa is None,  # R vs B sale de "el más oscuro es R"; confirmar con toma real
                 cfa_metricas={k: round(v, 5) for k, v in cfa_info.items()},
-                candidatos=cands[:5], decodificado=decodificar,
+                candidatos=cands[:5], decodificado=decodificar, max_crudo=max_crudo,
+                modo4='lineal12' if lineal12 else ('curva10' if perfil_info.get('decodificar10') else None),
                 perfil={k: v for k, v in perfil_info.items() if k in ('blanco', 'negro', 'balance_jpg', 'neutro')})
     return img, info
 

@@ -1,0 +1,23 @@
+10 REM M4N DIAGNOSTICO: M4R sin SaveCFAonTake (modo 4 lineal, sin archivo RAW) para ver si la revision depende del guardado del RAW: solo RAM
+20 FOREIGN b = Run_SpecifyFunc(472806, 1, 0, 1189760, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY b
+40 IF b == 30757 THEN 60
+50 END
+60 FOREIGN q = Run_SpecifyFunc(1306778, 2, 0, 1189760, 28712, 0, 0, 0, 0)
+70 FOREIGN d = Run_SpecifyFunc(472806, 1, 0, 1189760, 0, 0, 0, 0, 0)
+80 LOG_PRINT VERIFY d
+90 IF d == 28712 THEN 110
+100 END
+110 FOREIGN f = Run_SpecifyFunc(1674172, 1, 0, 1255296, 0, 0, 0, 0, 0)
+120 FOREIGN g = Run_SpecifyFunc(1674172, 1, 0, 1320832, 0, 0, 0, 0, 0)
+130 FOREIGN h = Run_SpecifyFunc(1674172, 1, 0, 1386368, 0, 0, 0, 0, 0)
+140 FOREIGN i = Run_SpecifyFunc(1674172, 1, 0, 1451904, 0, 0, 0, 0, 0)
+150 FOREIGN j = Run_SpecifyFunc(1674172, 1, 0, 1517440, 0, 0, 0, 0, 0)
+160 FOREIGN k = Run_SpecifyFunc(1674172, 1, 0, 1582976, 0, 0, 0, 0, 0)
+170 FOREIGN l = Run_SpecifyFunc(1674172, 1, 0, 1648512, 0, 0, 0, 0, 0)
+180 FOREIGN m = Run_SpecifyFunc(1674172, 1, 0, 1714048, 0, 0, 0, 0, 0)
+190 FOREIGN r = Run_SpecifyFunc(450736, 1, 0, 4, 0, 0, 0, 0, 0)
+200 FOREIGN e = Run_SpecifyFunc(1674172, 1, 0, 4036520, 0, 0, 0, 0, 0)
+210 LOG_PRINT VERIFY e
+220 END
+RUN

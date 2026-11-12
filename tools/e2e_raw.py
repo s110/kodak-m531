@@ -7,6 +7,7 @@ formatos, partidos en dos campos, y los pasa por la CLI sin pistas. Exige:
   * que LibRaw (rawpy) abra el DNG y su raw_image sea idéntico, píxel a píxel, al mosaico original;
   * que LibRaw revele el DNG a RGB sin error.
   * con las fotos reales de dump/ (si están): balance por foto del modo 4 contra el par de modo 0.
+  * con las fotos reales de dump/raw13, raw14 y raw6: el modo 4 lineal (M4L/M4R) se separa solo del de fábrica (P9).
 Deja un artefacto verificable en work/e2e_raw/: reporte JSON con hashes y vistas previas PNG.
 
 uso: .venv/bin/python tools/e2e_raw.py [FOTO.jpg]
@@ -143,6 +144,86 @@ def balance_modo4(reporte):
     return fallos
 
 
+def modo4_lineal(reporte):
+    """Archivos de 21.150.720 B con fotos reales: M4L/M4R (12 bits lineales) contra P9 (curva de fábrica).
+
+    Mismo tamaño y mismo empaquetado; el conversor los separa solo. Verdad independiente:
+      * el mosaico del DNG, reempaquetado aquí a p12_lsb, tiene que dar los bytes del archivo de la cámara
+        (lineal: sin tocar un solo valor);
+      * el JPG que la propia cámara sacó de esos datos: con el RAW bien leído, el verde por bloques sigue al
+        JPG linealizado (correlación alta, pendiente log-log cerca de 1). Leído con la curva saturaría en 1023.
+      * los P9 de fábrica siguen por la curva (blanco 1023) y su mosaico ya no es el del archivo.
+    Devuelve el número de fallos."""
+    d = os.path.join(RAIZ, 'dump')
+    lineales = [('raw13/101O1994.RAW', 'M4L'), ('raw13/101O1995.RAW', 'M4L'), ('raw14/101O1996.RAW', 'M4R'),
+                ('raw14/101O2001.RAW', 'M4R')]
+    fabrica = ['raw6/101O1981.RAW', 'raw6/101O1982.RAW']
+    if not all(os.path.exists(os.path.join(d, r)) for r in [x[0] for x in lineales] + fabrica):
+        reporte['modo4_lineal'] = 'omitido: faltan las fotos de dump/'
+        print('OMITIDO modo 4 lineal (faltan las fotos de dump/)')
+        return 0
+
+    def bloques(a, n=24):
+        k = a.shape[0] // n
+        h, w = a.shape[0] // k * k, a.shape[1] // k * k
+        return a[:h, :w].reshape(h // k, k, w // k, k).mean((1, 3))
+
+    def contra_jpg(mos, ruta_raw):
+        jpg = os.path.join(os.path.dirname(ruta_raw), os.path.basename(ruta_raw).replace('O', '_', 1)[:-4] + '.JPG')
+        j = np.asarray(Image.open(jpg).convert('RGB')).astype(np.float64)[..., 1] / 255
+        j = np.where(j <= 0.04045, j / 12.92, ((j + 0.055) / 1.055) ** 2.4)
+        g = (mos[0::2, 0::2].astype(np.float64) + mos[1::2, 1::2]) / 2      # verdes de GBRG
+        g = g[12:-12, 8:-8]                                                 # el JPG recorta a 4288×3216
+        mejor = (-1.0, 0.0)
+        for giro in range(4):                                               # la cámara gira el JPG según su sensor
+            jr = np.rot90(j, giro)
+            if (jr.shape[0] > jr.shape[1]) != (g.shape[0] > g.shape[1]):
+                continue
+            a, b = bloques(g), bloques(jr)
+            n, m = min(a.shape[0], b.shape[0]), min(a.shape[1], b.shape[1])
+            a, b = a[:n, :m].ravel(), b[:n, :m].ravel()
+            sel = (b > 0.02) & (b < 0.7) & (a > 4)
+            if sel.sum() < 50:
+                continue
+            c = float(np.corrcoef(a, b)[0, 1])
+            if c > mejor[0]:
+                mejor = (c, float(np.polyfit(np.log(a[sel]), np.log(b[sel]), 1)[0]))
+        return mejor
+
+    fallos, filas = 0, []
+    tmp = os.path.join(SALIDA, 'modo4_tmp.dng')
+    for rel, kit in lineales:
+        ruta = os.path.join(d, rel)
+        info = _cli_dng(ruta, tmp)
+        with rawpy.imread(tmp) as rp:
+            mos, blanco = rp.raw_image.copy(), int(rp.white_level)
+            rp.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
+        identico = empaquetar(mos, 'p12_lsb', 12) == open(ruta, 'rb').read()
+        corr, pend = contra_jpg(mos, ruta)
+        ok = (info['modo4'] == 'lineal12' and info['packing'] == 'p12_lsb' and info['negro'] == 0 and info['blanco'] == 4095
+              and blanco == 4095 and identico and int(mos.max()) > 1020 and corr > 0.97 and 0.9 < pend < 1.4)
+        fallos += not ok
+        filas.append(dict(archivo=rel, kit=kit, modo4=info['modo4'], maximo=int(mos.max()), blanco_dng=blanco,
+                          identico_al_archivo=identico, corr_jpg=round(corr, 4), pendiente_loglog=round(pend, 3),
+                          balance=info['balance'], ok=ok))
+        print(('OK   ' if ok else 'FALLO'), 'modo 4 lineal', rel, kit, f'max={int(mos.max())} corr={corr:.3f} pend={pend:.2f}')
+    for rel in fabrica:
+        ruta = os.path.join(d, rel)
+        info = _cli_dng(ruta, tmp)
+        with rawpy.imread(tmp) as rp:
+            mos, blanco = rp.raw_image.copy(), int(rp.white_level)
+        crudo_igual = empaquetar(mos, 'p12_lsb', 12) == open(ruta, 'rb').read()
+        ok = (info['modo4'] == 'curva10' and info['max_crudo'] <= 1020 and info['blanco'] == 1023 and blanco == 1023
+              and int(mos.max()) <= 1023 and not crudo_igual)
+        fallos += not ok
+        filas.append(dict(archivo=rel, kit='P9', modo4=info['modo4'], max_crudo=info['max_crudo'], blanco_dng=blanco,
+                          decodificado_con_curva=not crudo_igual, ok=ok))
+        print(('OK   ' if ok else 'FALLO'), 'modo 4 de fábrica', rel, f"max_crudo={info['max_crudo']} blanco={blanco}")
+    os.remove(tmp)
+    reporte['modo4_lineal'] = dict(casos=filas)
+    return fallos
+
+
 def main():
     global W, H
     os.makedirs(SALIDA, exist_ok=True)
@@ -199,6 +280,7 @@ def main():
             reporte['casos'].append(caso)
             print(('OK   ' if ok else 'FALLO'), base, '' if ok else det, '' if rb_ok else '(R/B invertidos: heurística)')
     fallos += balance_modo4(reporte)
+    fallos += modo4_lineal(reporte)
     total = len(reporte['casos'])
     reporte['resultado'] = 'OK' if not fallos else f'{fallos} fallo(s) de {total}'
     reporte['rb_heuristica_acierta'] = f"{sum(1 for c in reporte['casos'] if c.get('rb_ok'))} de {total}"

@@ -66,6 +66,9 @@ PARCHES = {
     # 0x122780 `or_s r0,r0,r1` (0x7825) -> `mov_s r0,r1` (0x7028): cambian sus dos bytes
     'M4L': {0x1286e0: ('tabla', SALTO_VISTA, 0xa5cb), 0x122780: ('codigo', 0x7825, 0x7028),
             0x122781: ('codigo', 0x7825, 0x7028)},
+    # M4R = M4L sin tocar la tabla; M4N = M4R sin SaveCFAonTake (diagnóstico de la revisión)
+    'M4R': {0x122780: ('codigo', 0x7825, 0x7028), 0x122781: ('codigo', 0x7825, 0x7028)},
+    'M4N': {0x122780: ('codigo', 0x7825, 0x7028), 0x122781: ('codigo', 0x7825, 0x7028)},
 }
 TABLAS = {'FOREIGN': 0x486334, 'SYSTEM': 0x4871f4, 'DEBUGGING': 0x487404}
 TIPOS = {0: 'int', 1: 'float', 2: 'str', 6: 'void'}
