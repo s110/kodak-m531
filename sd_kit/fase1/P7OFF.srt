@@ -1,0 +1,7 @@
+10 REM P7OFF: vuelve a 0 el ajuste 0xF (deshace P7 si quedo guardado)
+20 LET a = FOREIGN Run_SpecifyFunc(1674172, 1, 0, 4807320, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY a
+40 IF a == 69889 THEN GOTO 60
+50 GOTO 70
+60 LET r = FOREIGN Run_SpecifyFunc(3050116, 2, 0, 4807320, 69888, 0, 0, 0, 0)
+70 END

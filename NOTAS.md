@@ -261,3 +261,15 @@ del proyecto la había bloqueado por sus salvaguardas). Hallazgos principales y 
   y si hace falta además una combinación de teclas en About.
 - P6 (Take12BitCCDRaw) corrió sin error y sin RAW en las fotos 1965/1966. P6 corregido con
   `LOG_PRINT VERIFY` ya está en la SD; falta leer su .LOG tras el próximo arranque.
+
+## Menú oculto: condición real (2026-11-11)
+
+- La comprobación de `\HiddenMenu` está en `0x23bcf0`, manejador del evento `0x500` (**tecla
+  DERECHA**) de la pantalla **`Setup_FormatMenuConfirm`** (tabla en `0x47e7c0`, el nombre encabeza
+  la tabla). Pide: carpeta `B:\HiddenMenu` **y** ajuste `0xF` ≠ 0 (`0x6615c(0xf)`); entonces abre la
+  pantalla `0x34`. No es "About" como en la M530.
+- El ajuste `0xF` vale 0 (palabra `0x00011100` en `0x495a98`; byte bajo = valor). Sólo lo leen el
+  menú oculto y pantallas de fábrica (prueba de TV, prueba del AFE). Ningún código lo escribe con ID
+  fijo (el escritor genérico es `0x65f68(x, id, valor, y)`).
+- Sonda P7: con guardia, lo pone en 1 en RAM y registra antes/después con `LOG_PRINT VERIFY`.
+  `sd_kit/fase1/P7OFF.srt` lo devuelve a 0 si quedara guardado al apagar.
