@@ -19,6 +19,14 @@ Regla general: todo lo que no esté explícitamente permitido es un error. En co
     símbolo desconocido y detiene la CPU. Las palabras con el bit 31 se comparan y escriben por
     mitades de 16 bits (peek16/poke16);
   * aparece una sentencia que nunca corrió en la cámara: GOTO, GOSUB, RETURN, ELSE, LET;
+  * una llamada no respeta el tipo de retorno de la firma (0x199488, igual en las tres tablas): sin
+    asignar a una función que devuelve entero o FLOAT32 ("function returns a FLOAT32 or integer"),
+    o asignada a una función void ("function returns no value"). Las dos detienen la CPU; la primera
+    colgó la cámara el 2026-11-12 con `FOREIGN Run_SpecifyFunc(...)`. Los tipos salen de las firmas
+    del firmware (docs_script_manejadores.json; tools/e2e_scripts.py las coteja con la RAM);
+  * una variable no es una sola letra minúscula o recibe valor dos veces en el mismo script: las dos
+    cosas son válidas por código (0x29bce8, 0x198ff0) y ninguna corrió en la cámara. Las variables
+    no pasan de un script a otro (el contexto se crea y se destruye por script, 0x1078d8);
   * una línea no termina en CRLF (todos los scripts que corrieron en la cámara lo usan);
   * un LET crea una variable con nombre de función o palabra clave;
   * hay números con ceros a la izquierda, comillas desparejas o barras invertidas en cadenas;
@@ -72,9 +80,10 @@ ESQUEMAS = {
 }
 PERMITIDAS = set(ESQUEMAS)
 _mapa = json.load(open(os.path.join(os.path.dirname(AQUI), 'docs_script_manejadores.json')))
-TABLA = {}
+TABLA, RETORNO = {}, {}
 for e in _mapa:
     TABLA.setdefault(e['nombre'], set()).add(e['palabra_clave'])
+    RETORNO[(e['palabra_clave'], e['nombre'])] = e['firma'].split()[0]  # 'void' | 'int' (byte 6 | 0 de la firma)
 ENTERO = re.compile(r'-?(0|[1-9]\d*)$')
 SIN_SIGNO = re.compile(r'(0|[1-9]\d*)$')
 IF_VERIFICADO = re.compile(r'IF ([A-Za-z][A-Za-z0-9]*) == (0|[1-9]\d*) THEN ([1-9]\d*)$')
@@ -88,12 +97,20 @@ def _args(texto):
     return [] if not texto else [a.strip() for a in texto.split(',')]
 
 
-def _validar_llamada(kw, f, args, variables, err):
+def _validar_llamada(kw, var, f, args, variables, err):
     if f not in PERMITIDAS:
         err(f'función no permitida {f}')
         return
     if kw not in TABLA.get(f, set()):
         err(f'{f} no es de la tabla {kw} (es {sorted(TABLA.get(f, []))})')
+    else:
+        # 0x199488: sin variable y retorno 0/1 -> error; con variable y retorno 6 -> error. Lista
+        # blanca: sólo las dos combinaciones que el firmware acepta y que corrieron en la cámara.
+        ret = RETORNO[(kw, f)]
+        if not var and ret != 'void':
+            err(f'{f} devuelve un valor ({ret}): la llamada sin asignar detiene la CPU; usar "{kw} v = {f}(...)"')
+        elif var and ret != 'int':
+            err(f'{f} no devuelve valor ({ret}): la llamada asignada detiene la CPU; usar "{kw} {f}(...)"')
     if f == 'Run_SpecifyFunc':
         if len(args) != 9 or not all(SIN_SIGNO.match(a) for a in args):
             err('Run_SpecifyFunc necesita 9 enteros literales sin signo')
@@ -185,6 +202,12 @@ def revisar_srt(ruta):
             if nombre in TABLA or nombre in CLAVES or nombre in PERMITIDAS:
                 errores.append(f'{ruta}:{n}: LET no puede crear la variable {nombre}')
             else:
+                if not re.fullmatch(r'[a-z]', nombre):
+                    errores.append(f'{ruta}:{n}: la variable {nombre} debe ser una sola letra minúscula '
+                                   '(lo único que corrió en la cámara)')
+                if nombre in variables:
+                    errores.append(f'{ruta}:{n}: la variable {nombre} ya tiene valor: reasignar no está '
+                                   'verificado en la cámara; usar otra letra o partir el script')
                 variables.add(nombre)
     for n, cuerpo in cuerpos:
         def err(msg, n=n):
@@ -201,7 +224,7 @@ def revisar_srt(ruta):
             err('LET con llamada no existe: usar "FOREIGN var = Funcion(...)"')
         llamadas = LLAMADA.findall(sin_texto)
         for kw, var, f, args in llamadas:
-            _validar_llamada(kw, f, _args(args), variables, err)
+            _validar_llamada(kw, var, f, _args(args), variables, err)
         mlp = re.match(r'LOG_PRINT (\S+) (.*)$', sin_texto)
         if sin_texto.startswith('LOG_PRINT') and (not mlp or mlp.group(1) not in ('VERIFY', 'IGNORE', '0', '1')
                                                   or not re.fullmatch(r'[A-Za-z0-9_]+', mlp.group(2))):

@@ -20,9 +20,21 @@ Normal, sin zoom digital.
 Comparar bordes y halos en los JPG. El RAW no cambia (el realce sólo afecta al JPG).
 No toca: otras bandas de ISO, Sharpness Bajo/Alto, ASharp (segundo realce) ni la reducción de ruido.
 
+EET + EETV: realce a cero en las 11 bandas de ISO (Sharpness Normal). Lista: BatchScripts_EET.txt
+(P8, EET, EETV), que va a la SD con el nombre BatchScripts.txt, más P8.srt, EET.srt y EETV.srt.
+  EET   lee las 11 bandas con guardia (si una no es la de fábrica, anota esa lectura y termina sin
+        escribir nada), escribe las 11 y relee la primera.
+  EETV  relee las 11.
+Son dos scripts porque hacen falta 33 resultados y hay 26 letras: cada script usa cada letra una
+sola vez. Toda llamada a Run_SpecifyFunc va asignada ("FOREIGN v = Run_SpecifyFunc(...)"): sin
+asignar, el intérprete detiene la CPU (pasó el 2026-11-12, ver NOTAS.md).
+Logs esperados:
+  EET.LOG   VERIFY: 4472856                 (una línea)
+  EETV.LOG  VERIFY: 4472856                 (once líneas iguales)
+Si EET.LOG trae otro número, es la lectura de la banda cuya guardia falló y no se escribió nada.
+Prueba: sin flash, ISO 160 o más, Sharpness Normal, contra una foto con P8 solo de la misma escena.
+
 Variantes (NO están en BatchScripts.txt y no se copian a la SD todavía):
-  EET      realce a cero en las 11 bandas de ISO (Sharpness Normal). Usa variables de dos letras
-           (sin probar en la cámara). Agregar sólo después de que EE0 funcione.
   ASHARP0  apaga el segundo realce (ASharp) con un parche de código en 0x128900.
   NRE0     apaga la reducción de ruido multiescala (NRE) en 0x128890: más grano y manchas de color.
            La variante sin NRE no está probada con 14 MP; si falla, JPG de 224 B o cuelgue.

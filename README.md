@@ -43,6 +43,6 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
 | `tools/leer_ram.py` | lee la RAM de la cámara por USB (CD virtual, sin SD) |
 | `tools/verificar_volcados.py` | comprueba los volcados de la NAND Tool (tamaños, hashes, RHIR, boot, tabla) |
 | `tools/ajustar_ccm.py` | ajusta y valida la matriz de color con pares RAW/JPG |
-| `tools/e2e_raw.py`, `tools/e2e_fw.py`, `tools/e2e_nand.py` | pruebas de punta a punta |
+| `tools/e2e_raw.py`, `tools/e2e_fw.py`, `tools/e2e_nand.py`, `tools/e2e_scripts.py` | pruebas de punta a punta |
 
 Los volcados, binarios del fabricante, fotos y la RAM de la cámara no están en el repo (`.gitignore`).

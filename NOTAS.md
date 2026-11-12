@@ -741,3 +741,56 @@ la causa del cuelgue sigue sin estar probada, así que la prueba es la que decid
 - La rama falsa de `IF` (seguir en la línea siguiente) nunca corrió en la cámara.
 
 Procedimiento y registro esperado: `sd_kit/PASOS.md`, paso 6.
+
+## 2026-11-12 — EET colgó la cámara: llamada sin asignar a Run_SpecifyFunc (fe de erratas)
+
+- **Qué pasó.** EET reescrito con las 11 escrituras en la forma `FOREIGN Run_SpecifyFunc(...)` (sin
+  variable), por analogía con `FOREIGN SaveCFAonTake(1)`. La cámara se quedó en "RUN". `EET.LOG`
+  (respaldo en `dump/raw9`):
+  `460 FOREIGN Run_SpecifyFunc(3050116, 2, 0, 1785216, 4472856, 0, 0, 0, 0)` /
+  `Error: function returns a FLOAT32 or integer.` El verificador había dado OK.
+- **Lo que sí probó:** las 11 guardias pasaron (cada literal de banda tenía su valor de fábrica),
+  once variables `a`…`k` en un mismo script, y un programa de 79 líneas cargado. Ninguna escritura
+  corrió: el error sale al casar la firma, antes de despachar la llamada.
+- **Causa, leída en el código.** `0x10710c` parte la sentencia en el `=`; sin `=` el nombre de
+  variable queda vacío. `0x199b48` evalúa los argumentos y busca la función; al casar la firma,
+  `0x199488` mira el byte de tipo de retorno de la entrada (`+0xc`, el primer byte de la firma en
+  las tablas `0x486334` / `0x4871f4` / `0x487404`: 0 entero, 1 FLOAT32, 6 void):
+  - sin variable y retorno 0 o 1 → `Error: function returns a FLOAT32 or integer.` (`0x1994aa`);
+  - con variable y retorno 6 → `Error: function returns no value.` (`0x1994a0`).
+  Los dos pasan por `0x198adc` y detienen la CPU. `Run_SpecifyFunc` es `int` (byte 0), sea cual sea
+  la función a la que salta; `SaveCFAonTake` es `void` (byte 6), por eso sin asignar funciona.
+- **Errata:** "`FOREIGN f(x)` está probado" valía sólo para funciones void. La regla es por firma y
+  en los dos sentidos: las 80 funciones `int` del catálogo van siempre asignadas, las 161 `void`
+  nunca. `tools/e2e_scripts.py` coteja los 241 tipos de `docs_script_manejadores.json` con las
+  tablas de la RAM: coinciden todos.
+- **Variables, leído en el código.** `set_add_variable` (`0x198f78`) busca el nombre en la lista
+  enlazada del contexto (`+0x10`); si no está, crea un nodo (tres bloques del montículo, sin tope
+  de cantidad); si está (`0x198ff0`) y el tamaño coincide, copia el valor nuevo sobre el mismo
+  búfer. Reasignar es válido. El validador de nombres (`0x29bce8`) acepta `[A-Za-z0-9_]+`.
+  El lote (`0x1078d8`) reinicia el montículo una vez (`0x19a010`: 3/4 del búfer para datos, 1/4
+  para descriptores de 16 B) y, por cada script, crea el contexto (`0x198cd0`), lo ejecuta
+  (`0x10776c`) y lo destruye con sus líneas y variables (`0x198d9c`): **las variables no pasan de
+  un script al siguiente**, así que ningún script ejecutado en la cámara reasignó una variable.
+  `BatchScripts.log` anota el máximo del montículo por lote (22.096 B con P8 + EE0).
+- **Arreglo.** Hacen falta 33 resultados y hay 26 letras. Elegido: dos scripts, cada letra una sola
+  vez por script, porque así todo lo que se ejecuta ya corrió en la cámara (crear variable, `IF`,
+  `poke32` asignado, `LOG_PRINT`), mientras que reasignar sólo está leído.
+  `EET.srt`: 11 guardias (`a`…`k`, idénticas byte a byte a las que pasaron), 11 escrituras
+  asignadas (`l`…`v`) y relectura de la primera banda (`w`). `EETV.srt`: relee las 11 (`a`…`k`).
+  Lista `fase3/Batch/BatchScripts_EET.txt` = P8, EET, EETV. Lo nuevo respecto de lo ejecutado: 23
+  variables en un script (antes 11); por código la lista no tiene tope y EET ocupa menos líneas (59)
+  que el programa que ya cargó (79).
+  Esperado: `EET.LOG` una línea `VERIFY: 4472856`; `EETV.LOG` once líneas `VERIFY: 4472856`.
+  Si `EET.LOG` trae otro número, es la lectura de la banda cuya guardia falló (nada escrito).
+- **Verificador.** `check_scripts.py` exige el tipo de retorno de la firma en las tres tablas
+  (sin asignar sólo void, asignada sólo int), variables de una letra minúscula y una sola
+  asignación por variable en cada script. `tools/e2e_scripts.py` (fallas previstas en su cabecera,
+  16 casos, artefacto `work/e2e_scripts/reporte.json`) corre la CLI sobre los kits, sobre el juego
+  de la SD y sobre `dump/raw9/EET.srt`: debe marcar las 11 líneas sin asignar, empezando por la que
+  la cámara nombró en su log.
+- **Auditoría del resto de `sd_kit`** con la regla nueva: fase1 (P0, P6, P8, P9, M3F2), fase2
+  (MEMRW, MEMRWT) y fase3 (EE0, ASHARP0, NRE0) pasan; ninguno tiene una llamada sin asignar a una
+  función con valor ni una void asignada. Siguen sin correr en la cámara: `peek16`/`poke16` y el
+  vaciado de caché (MEMRW, ASHARP0, NRE0), la palabra clave `SYSTEM` y `SYSTEM a = MemRead(...)`
+  (MEMRWT), y un `END` ejecutado en mitad del programa (rama de guardia fallida de todos).
