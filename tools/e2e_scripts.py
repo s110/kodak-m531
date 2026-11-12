@@ -61,6 +61,18 @@ Cómo puede fallar el verificador (escrito antes del código; cada punto es un c
       en cinco estados iniciales, y un control con el valor escrito cambiado.
   F18. El juego M4L + M4Q, armado como va a la SD, no pasa el verificador, la lista nombra otra
       cosa o está en otro orden (M4Q antes de M4L encuentra el modo 0 y termina sin escribir).
+  F19. M4W (color de la revisión en modo 4 lineal) cambia una palabra que no es la de las banderas
+      de la tabla de módulos de la revisión, o esa palabra la lee alguien más. Se coteja con el
+      firmware de fábrica: el literal de `0x1b03bc` vale `0x00380300`; lo carga sólo `0x1b02fa`
+      (`ld_s r1,[pcl,0xc4]`, dentro de `0x1b02e0`); `0x1b02e0` tiene una sola llamada (`0x1229e8`,
+      dentro de `0x122944`) y `0x122944` otra sola (`0x148c52`, dentro de `0x148b78`); la bandera
+      que decide la tabla de linealización es el bit 19 (`btst_s r0,0x13` en `0x147824`, con
+      `0x18fcf8` + `0x18fcc0` si está y `0x18fcdc` si no). El valor nuevo sólo apaga ese bit.
+  F20. M4W escribe sin M4L aplicado (RAW con curva: la revisión necesita la linealización), sin
+      M4Q aplicado (la revisión lee 8 bits), con el literal distinto del de fábrica, no relee, o
+      cambia otros bytes. Se ejecuta entero sobre el firmware de fábrica con M4L y M4Q encima, en
+      cinco estados, y un control con el valor escrito cambiado.
+  F21. El juego M4L + M4Q + M4W, armado como va a la SD, no pasa el verificador o está en otro orden.
 
 Corre la CLI de verdad sobre carpetas armadas en work/e2e_scripts/. Artefacto:
 work/e2e_scripts/reporte.json (veredicto por caso, salida de la CLI y SHA-256 de cada script).
@@ -129,6 +141,19 @@ M4Q_NUEVO = {M4Q_RECORTE: 0xc744,        # st_s r15,[sp,0x10]
              M4Q_FORMATO: 0xd804}        # mov_s r0,0x4
 PARCHES_ENCADENADOS = {'M4Q': {0x148ed7: ('codigo', 0xc044, 0xc744), 0x148ed8: ('codigo', 0x700a, 0xd804),
                                0x148ed9: ('codigo', 0x700a, 0xd804)}}
+# M4W: banderas de la tabla de módulos de la revisión (0x1b02e0, literal de 0x1b03bc). Bit 19 =
+# cargar y habilitar la tabla de linealización (inversa de la curva del RAW de 8 bits).
+M4W_LITERAL, M4W_CARGA, M4W_BIT = 0x1b03bc, 0x1b02fa, 19
+M4W_M4L, M4W_M4L_VALOR = 0x122780, 0x7028          # instrucción que M4L deja (RAW lineal)
+M4W_FABRICA = {
+    M4W_LITERAL: 0x0300, M4W_LITERAL + 2: 0x0038,   # 0x00380300
+    M4W_CARGA: 0xd131,                               # ld_s r1,[pcl,0xc4]
+    0x147824: 0xb8f3,                                # btst_s r0,0x13
+    0x147826: 0xf209,                                # beq_s 0x147836 (sin bandera: 0x18fcdc)
+}
+M4W_LLAMADAS = {0x1b02e0: 0x1229e8, 0x122944: 0x148c52,          # constructor de la tabla: una llamada cada uno
+                0x18fcf8: 0x147828, 0x18fcc0: 0x147830, 0x18fcdc: 0x147836}
+PARCHES_ENCADENADOS['M4W'] = {0x1b03be: ('codigo', 0x0038, 0x0030)}
 TABLAS = {'FOREIGN': 0x486334, 'SYSTEM': 0x4871f4, 'DEBUGGING': 0x487404}
 TIPOS = {0: 'int', 1: 'float', 2: 'str', 6: 'void'}
 # ORI: compuerta del sensor de orientación, leída en el desensamblado de 0xf02a0. El literal de
@@ -376,7 +401,7 @@ def referencias_a(destino):
     for off in range(0, fin, 2):
         h0, h1 = fw[off] | fw[off + 1] << 8, fw[off + 2] | fw[off + 3] << 8
         pc = STOCK_BASE + off
-        if fw[off:off + 4] == destino.to_bytes(4, 'little'):
+        if pc % 4 == 0 and fw[off:off + 4] == destino.to_bytes(4, 'little'):  # literales y tablas: alineados a 4
             refs.append(('puntero', pc))
         w = h0 << 16 | h1
         mayor, s9, s10, t4 = w >> 27, w >> 18 & 0x1ff, w >> 6 & 0x3ff, w & 0xf
@@ -432,6 +457,37 @@ def revisar_m4q(crudo):
         if not bien or log != log_esperado:
             problemas.append(f'{nombre}: log {log}, escrituras {escrituras}, final {[hex(x) for x in final]}, '
                              f'bytes de código distintos {sorted(map(hex, codigo))}')
+    return not problemas, f'{len(estados)} estados; problemas: {problemas}'
+
+
+def revisar_m4w(crudo):
+    """F20: M4W entero sobre el firmware de fábrica con M4L y M4Q encima, en cinco estados."""
+    def palabra(d, v):
+        return {d: v & 0xff, d + 1: v >> 8}
+    lit = M4W_LITERAL + 2
+    q, viejo, nuevo = M4Q_NUEVO[M4Q_FORMATO], 0x0038, 0x0030
+    estados = {  # nombre: (palabra de M4L, palabra de M4Q, mitad alta del literal, log, escribe)
+        'M4L y M4Q aplicados': (M4W_M4L_VALOR, q, viejo, [M4W_M4L_VALOR, q, viejo, nuevo], True),
+        'sin M4L': (0x7825, q, viejo, [0x7825], False),
+        'sin M4Q': (M4W_M4L_VALOR, M4Q_FABRICA[M4Q_FORMATO], viejo, [M4W_M4L_VALOR, M4Q_FABRICA[M4Q_FORMATO]], False),
+        'literal ajeno': (M4W_M4L_VALOR, q, 0x0078, [M4W_M4L_VALOR, q, 0x0078], False),
+        'ya aplicado': (M4W_M4L_VALOR, q, nuevo, [M4W_M4L_VALOR, q, nuevo], False),
+    }
+    problemas = []
+    for nombre, (l, f, h, log_esperado, escribe) in estados.items():
+        previo = {**palabra(M4W_M4L, l), **palabra(M4Q_FORMATO, f), **palabra(lit, h)}
+        mem = MemoriaDeFabrica(previo)
+        try:
+            log, ops = simular(crudo, mem)
+        except (KeyError, ValueError) as e:
+            problemas.append(f'{nombre}: {type(e).__name__} {e}')
+            continue
+        escrituras = [o for o in ops if o[0] == 'w']
+        tocados = {d for d in mem if mem[d] != previo.get(d, mem.fw[d - STOCK_BASE])}
+        bien = (escrituras == [('w', lit, 2, nuevo)] and tocados == {lit} and ops[-1] == ('r', lit, 2, nuevo)) \
+            if escribe else (not escrituras and not tocados)
+        if not bien or log != log_esperado:
+            problemas.append(f'{nombre}: log {log}, escrituras {escrituras}, bytes tocados {sorted(map(hex, tocados))}')
     return not problemas, f'{len(estados)} estados; problemas: {problemas}'
 
 
@@ -559,6 +615,36 @@ def main():
            f'BatchScripts_M4LQ.txt = {lista}; M4L deja el modo 4 antes de que corra M4Q')
     debe_pasar('sd_m4lq', 'F18',
                carpeta('sd_m4lq', {n + '.srt': leer('fase1', 'Batch', n + '.srt') for n in lista}, lista))
+
+    # F19: M4W contra el firmware de fábrica
+    m4w = leer('fase1', 'Batch', 'M4W.srt')
+    leidas = {d: medias(d, 1)[0] for d in M4W_FABRICA}
+    carga = (M4W_CARGA & ~3) + (leidas[M4W_CARGA] & 0xff) * 4          # ld_s b,[pcl,u8·4]
+    otras = [STOCK_BASE + o for o in range(0, 0x3a0000 - STOCK_BASE, 2)  # cualquier ld_s rX,[pcl,…] al literal
+             if fwb[o + 1] >> 3 == 0x1a and ((STOCK_BASE + o) & ~3) + fwb[o] * 4 == M4W_LITERAL]
+    llamadas = {f: [d for _, d in referencias_a(f)] for f in M4W_LLAMADAS}
+    literal = leidas[M4W_LITERAL] | leidas[M4W_LITERAL + 2] << 16
+    anotar('m4w_sitio_en_firmware', 'F19',
+           leidas == M4W_FABRICA and carga == M4W_LITERAL and otras == [M4W_CARGA]
+           and llamadas == {f: [d] for f, d in M4W_LLAMADAS.items()}
+           and literal ^ (0x0030 << 16 | leidas[M4W_LITERAL]) == 1 << M4W_BIT
+           and leidas[0x147824] & 0x1f == M4W_BIT,
+           f'literal {literal:#x}; carga desde {M4W_CARGA:#x} apunta a {carga:#x}; ld_s al literal: '
+           f'{[hex(x) for x in otras]}; llamadas: { {hex(f): [hex(x) for x in v] for f, v in llamadas.items()} }')
+    ok, detalle = revisar_parches('M4W')
+    anotar('parches_M4W', 'F10 F11 F19', ok, detalle)
+
+    # F20: M4W ejecutado, y control
+    ok, detalle = revisar_m4w(m4w)
+    anotar('m4w_simulado', 'F20', ok, detalle)
+    ok, detalle = revisar_m4w(mutar(m4w, ', 48, 0, 0, 0, 0)', ', 49, 0, 0, 0, 0)'))
+    anotar('m4w_control_valor_cambiado', 'F20', not ok and 'M4L y M4Q aplicados' in detalle, detalle)
+
+    # F21: el juego M4L + M4Q + M4W
+    lista = open(os.path.join(KIT, 'fase1', 'Batch', 'BatchScripts_M4LQW.txt')).read().split()
+    anotar('sd_m4lqw_lista', 'F21', lista == ['M4L', 'M4Q', 'M4W'], f'BatchScripts_M4LQW.txt = {lista}')
+    debe_pasar('sd_m4lqw', 'F21',
+               carpeta('sd_m4lqw', {n + '.srt': leer('fase1', 'Batch', n + '.srt') for n in lista}, lista))
 
     # F1 + F8: el script que colgó la cámara, tal cual quedó respaldado
     colgado = open(os.path.join(COLGADO, 'EET.srt'), 'rb').read()

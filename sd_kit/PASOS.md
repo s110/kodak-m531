@@ -212,7 +212,8 @@ Para deshacer ORI: apagar. El ajuste "Sensor de orientación" del menú queda co
 ## Paso 9 — M4Q: revisión correcta en modo 4 (M4L + M4Q, sólo RAM)
 Análisis: `../NOTAS.md`, sección "Revisión en modo ≠ 0: causa leída en el código". La revisión la genera
 `0x148b78` leyendo el búfer del RAW con el formato fijo en 0 (8 bits). M4Q cambia dos palabras de 16 bits
-de esa llamada: formato 4 y cuadro completo. No corrió todavía en la cámara.
+de esa llamada: formato 4 y cuadro completo. **Probado el 2026-11-12 (`dump/raw18`): logs exactos, revisión
+sin ruido, JPG y RAW correctos; la revisión sale verdosa (paso 10).**
 Antes: `python3 -I tools/e2e_scripts.py` (47 casos). Quickview en **On**. **Zoom digital sin usar.**
 
 1. Claude deja en `Batch/` de la SD tres archivos de `fase1/Batch`: `M4L.srt`, `M4Q.srt` y
@@ -245,6 +246,38 @@ Antes: `python3 -I tools/e2e_scripts.py` (47 casos). Quickview en **On**. **Zoom
 
 Al terminar, Claude guarda la SD en el siguiente `dump/rawN` con `SHA256SUMS` y comprueba JPG y RAW con
 `tools/e2e_raw.py`.
+
+## Paso 10 — M4W: color de la revisión en modo 4 (M4L + M4Q + M4W, sólo RAM)
+Análisis: `../NOTAS.md`, sección "M4Q probado". Con M4L el RAW es lineal y la revisión le aplica la
+tabla de linealización del RAW de 8 bits: sale verdosa. M4W apaga esa tabla sólo en la revisión (un
+bit de un literal). No corrió todavía en la cámara.
+Antes: `python3 -I tools/e2e_scripts.py` (53 casos). Quickview en **On**. Zoom digital sin usar.
+
+1. Claude deja en `Batch/` de la SD cuatro archivos de `fase1/Batch`: `M4L.srt`, `M4Q.srt`, `M4W.srt`
+   y `BatchScripts.txt` (copia de `BatchScripts_M4LQW.txt`: M4L, M4Q, M4W, en ese orden). Preparación
+   como en 6.1. Batería fuera unos segundos antes de encender.
+2. Encender y esperar "Script / Run…". No disparar antes de que termine.
+3. Tres fotos sin zoom digital, mirando la revisión de cada una. Una de ellas con algo blanco o gris
+   en la escena.
+4. Esperado en los `.LOG`:
+   - `M4L.LOG`: `VERIFY: 8`, `30757`, `3`, `28712`, `4`.
+   - `M4Q.LOG`: `VERIFY: 4`, `49220`, `28682`, `51012`, `55300`.
+   - `M4W.LOG`: `VERIFY: 28712`, `55300`, `56`, `48`.
+5. Esperado en las fotos: revisión sin ruido y **sin el tono verdoso**, con el mismo color que el JPG
+   (algo cálido: el AWB del modo 4 sigue sin calcularse bien). JPG y RAW como en el paso 9.
+6. Cómo leer un resultado distinto:
+   - `M4W.LOG` con un solo número ≠ 28712: M4L no se aplicó. Con `28712` y un número ≠ 55300: M4Q no
+     se aplicó. Con `28712`, `55300` y un número ≠ 56: el literal no es el del volcado. En los tres
+     casos M4W no escribió; anotar los números.
+   - Log completo y revisión igual de verdosa: la tabla no era la causa. Guardar la SD tal cual.
+   - Log completo y revisión muy oscura o muy clara: el paso directo cambia la escala. Anotarlo y
+     guardar la SD; el JPG y el RAW deben seguir correctos.
+   - Cámara congelada tras un disparo: batería y SD fuera; nada queda escrito. Quitar `M4W` de
+     `BatchScripts.txt` (M4L + M4Q solos ya están probados).
+7. Prueba aparte y opcional para el JPG cálido: con el mismo kit, poner el balance de blancos del menú
+   en un valor fijo (Luz día o Tungsteno, según la luz) y tomar una foto. Si el JPG sale neutro, el
+   balance fijo evita el AWB del modo 4.
+8. No usar el modo 0 con este kit cargado: apagar primero.
 
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los

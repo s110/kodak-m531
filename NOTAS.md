@@ -1286,7 +1286,7 @@ M2V si 8c sale con ruido.
 ## 2026-11-12 — Revisión en modo ≠ 0: causa leída en el código (formato del RAW fijo en 0) y script M4Q
 
 Análisis estático (`work/code_full.s`, Ghidra `-noanalysis`, `dump/ram_snapshot.bin`,
-`firmware/stock`). Sin cámara. **M4Q no corrió todavía en la cámara.**
+`firmware/stock`). Sin cámara. (M4Q corrió después: ver la sección siguiente.)
 
 **Causa (leída en el código)**
 1. *Quién dibuja la revisión.* El disparo termina con el evento `0x7ce2` (`0x12923c` → `0x5ef00`). La
@@ -1383,3 +1383,70 @@ fábrica (palabras de `0x148b78` y `0x25239c`, y barrido de todo el código: una
 modo 0, cada palabra ajena, ya aplicado) con un control de valor cambiado; y el juego M4L + M4Q armado
 como va a la SD. Pasos en la cámara: `sd_kit/PASOS.md`, paso 9.
 
+## 2026-11-12 — M4Q probado: revisión sin ruido; tono verdoso por la tabla de linealización; script M4W
+
+**Medido en la cámara** (`dump/raw18`, fotos 2012–2014, M4L + M4Q)
+- `M4L.LOG`: `8`, `30757`, `3`, `28712`, `4`. `M4Q.LOG`: `4`, `49220`, `28682`, `51012`, `55300`.
+- **La revisión sale reconocible y sin ruido.** La causa de la sección anterior queda confirmada: el
+  IRP con entrada de memoria desempaqueta el formato 4 igual que el sensor lo escribe.
+- La revisión se ve **verdosa**.
+- Los tres JPG son correctos (3216×4288, escena reconocible, dominante cálida como con M4L solo;
+  MakerNote con ganancias 481/256/390 y 471/256/396). Los tres RAW miden 21.150.720 B, 12 bits
+  lineales (máximos 3644–4085) y **negro 0** (percentil 0,1 = 0 en los cuatro canales): el nivel de
+  negro ya viene restado de la captura y no explica el color.
+
+**Causa del tono verdoso (leída en el código)**
+- La tabla de módulos de la revisión (`0x122944`, que sólo llama `0x148b78`) toma sus banderas de
+  `0x1b02e0`: literal `0x00380300` en `0x1b03bc`. El bit 19 hace que `0x147670` cargue en el IRP la
+  tabla de `0x1236e0` (`0x18fcf8`, 1024 palabras a `0x0ff11000`) y la habilite (`0x18fcc0`, bit 9 de
+  `0x0ff100e0` en 0). Sin el bit, `0x147670` llama a `0x18fcdc` (bit 9 en 1: módulo en paso directo).
+- Esa tabla (`0x429c4c`, 256 entradas: 64 → 66, 128 → 166, 192 → 415, 255 → 1023) es la **inversa de
+  la curva del sensor** (`0x427e14`: 66 → 64, 166 → 128, 415 → 194, 1023 → 255): linealiza el RAW de
+  8 bits con curva. La misma tabla la usa el AWB por software (`0x8cb52`, entre otros).
+- M4L apaga la curva en la captura, así que la revisión **linealiza por segunda vez** datos que ya son
+  lineales. Los canales con más señal suben más que los de menos, y en el RAW el verde es siempre el
+  mayor: las ganancias de balance, calculadas para datos lineales, quedan cortas para rojo y azul. Es
+  el efecto contrario al JPG rosado de P9 (datos con curva tratados como lineales).
+- La vista en vivo, que procesa datos lineales del sensor con los mismos módulos, lleva las banderas
+  `0x300401`: sin el bit 19. El paso directo es la configuración normal para datos lineales.
+
+**M4W** (`sd_kit/fase1/Batch/M4W.srt`, lista `BatchScripts_M4LQW.txt` = M4L, M4Q, M4W). Una palabra de
+16 bits: `0x1b03be` de `0x0038` a `0x0030` (el literal pasa de `0x00380300` a `0x00300300`: sólo se
+apaga el bit 19). Guardias: M4L aplicado (`0x122780` = 28712), M4Q aplicado (`0x148ed8` = 55300),
+literal de fábrica (56); relectura y registro. Es un dato leído con `ld_s [pcl]`: no pide desalojo de
+caché. No corrió todavía en la cámara.
+
+**Demostrado por código**
+- *Alcance.* El literal `0x1b03bc` lo carga una sola instrucción (`0x1b02fa`, dentro de `0x1b02e0`);
+  `0x1b02e0` tiene una sola llamada (`0x1229e8`) y `0x122944` otra sola (`0x148c52`). Sólo cambia la
+  tabla de módulos de la revisión.
+- *RAW.* La captura fija el módulo por su cuenta en cada disparo (`0xe3eaa` → `0x147670` con la tabla
+  de captura, sin el bit 19) y el RAW se escribe antes de la revisión.
+- *JPG.* Con el firmware de fábrica la revisión deja la linealización habilitada antes del procesado
+  de cada foto, en todos los modos, y aun así el procesado linealiza en modo 0 y no linealiza en modo
+  4 (JPG rosado de P9, JPG correcto de M4L). El procesado decide su linealización por sí mismo y no
+  depende del estado que deja la revisión.
+- *Otros usuarios.* Los seis llamadores de `0x147670` (vista en vivo, captura, estadística, revisión)
+  ponen o quitan el paso directo según su propia tabla en cada pasada.
+
+**Inferido, sin prueba en la cámara**
+- Que el tono verdoso se deba sólo a esa tabla. Una simulación sobre el RAW 2013 con las ganancias de
+  la cámara da (134, 114, 97) sin la tabla y (181, 179, 108) con ella: el verde alcanza al rojo.
+- El brillo de la revisión en paso directo. Con M4W la revisión debería parecerse al JPG: cálida,
+  porque usa las mismas ganancias de AWB.
+
+**AWB del modo 4 (dominante cálida del JPG): evaluado, sin tocar**
+- La estadística por foto (`0x86d14` → `0x147b14(0, RAW, …)`) lee el RAW con formato 0. Cambiar sólo
+  ese argumento a 4 no alcanza: las 48 franjas se colocan en `fila·ancho` bytes de 8 bits, y en 12
+  bits dos de cada tres empiezan a mitad de línea, con las filas del mosaico mezcladas.
+- Además el cálculo del AWB linealiza por software con la misma tabla (`0x8cb52`): con datos lineales
+  repetiría el defecto de la revisión.
+- Arreglarlo pide tres cambios de código en funciones que alimentan el JPG. Por definición cambia el
+  JPG guardado, así que queda fuera de M4W. Dos salidas sin riesgo: el balance del conversor
+  (`m531raw.py`, parche blanco) y probar en la cámara un balance fijo del menú (Luz día, Tungsteno),
+  cuyas ganancias no salen de la estadística. Esa prueba no se hizo.
+
+**Prueba E2E.** `tools/e2e_scripts.py`, 53 casos. Nuevos: el sitio de M4W contra el firmware de
+fábrica (literal, única carga, llamada única de `0x1b02e0` y de `0x122944`, bit 19 en `0x147824`),
+M4W ejecutado sobre el firmware con M4L y M4Q encima en cinco estados con un control, y el juego
+M4L + M4Q + M4W. Pasos en la cámara: `sd_kit/PASOS.md`, paso 10.
