@@ -8,6 +8,8 @@ formatos, partidos en dos campos, y los pasa por la CLI sin pistas. Exige:
   * que LibRaw revele el DNG a RGB sin error.
   * con las fotos reales de dump/ (si están): balance por foto del modo 4 contra el par de modo 0.
   * con las fotos reales de dump/raw13, raw14 y raw6: el modo 4 lineal (M4L/M4R) se separa solo del de fábrica (P9).
+  * con fotos reales de los cuatro formatos: el DNG revelado por el motor de macOS (sips) y por darktable-cli
+    da el mouse blanco neutro y el color de LibRaw y del JPG de la cámara.
 Deja un artefacto verificable en work/e2e_raw/: reporte JSON con hashes y vistas previas PNG.
 
 uso: .venv/bin/python tools/e2e_raw.py [FOTO.jpg]
@@ -200,8 +202,8 @@ def modo4_lineal(reporte):
             rp.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
         identico = empaquetar(mos, 'p12_lsb', 12) == open(ruta, 'rb').read()
         corr, pend = contra_jpg(mos, ruta)
-        ok = (info['modo4'] == 'lineal12' and info['packing'] == 'p12_lsb' and info['negro'] == 0 and info['blanco'] == 4095
-              and blanco == 4095 and identico and int(mos.max()) > 1020 and corr > 0.97 and 0.9 < pend < 1.4)
+        ok = (info['modo4'] == 'lineal12' and info['packing'] == 'p12_lsb' and info['negro'] == 0 and info['blanco'] == 3950
+              and blanco == 3950 and identico and int(mos.max()) > 1020 and corr > 0.97 and 0.9 < pend < 1.4)
         fallos += not ok
         filas.append(dict(archivo=rel, kit=kit, modo4=info['modo4'], maximo=int(mos.max()), blanco_dng=blanco,
                           identico_al_archivo=identico, corr_jpg=round(corr, 4), pendiente_loglog=round(pend, 3),
@@ -221,6 +223,129 @@ def modo4_lineal(reporte):
         print(('OK   ' if ok else 'FALLO'), 'modo 4 de fábrica', rel, f"max_crudo={info['max_crudo']} blanco={blanco}")
     os.remove(tmp)
     reporte['modo4_lineal'] = dict(casos=filas)
+    return fallos
+
+
+DARKTABLE = '/Applications/darktable.app/Contents/MacOS/darktable-cli'
+# Parches en fracciones del cuadro del RAW (x0, x1, y0, y1). 'blanco': objeto blanco de verdad (el mouse);
+# 'color': superficies con color propio (madera del escritorio, teclas).
+CASOS_COLOR = [
+    dict(raw='raw20/101O2020.RAW', formato='M4L lineal 12 bits, preset Tungsteno, sin flash',
+         blanco=(0.70, 0.82, 0.31, 0.36), color=dict(madera=(0.55, 0.80, 0.62, 0.77))),
+    dict(raw='raw19/101O2017.RAW', formato='M4L lineal 12 bits, flash, cenital',
+         blanco=(0.74, 0.84, 0.50, 0.72), color=dict(fondo_abajo=(0.03, 0.20, 0.80, 0.97))),
+    dict(raw='raw20/101O2019.RAW', formato='M4L lineal 12 bits, flash, 27 % quemado',
+         blanco=(0.75, 0.95, 0.38, 0.55), color=dict(madera=(0.10, 0.60, 0.75, 0.88))),
+    dict(raw='raw8/101O1983.RAW', formato='modo 0, 8 bits con curva', jpg=True,
+         color=dict(madera=(0.02, 0.20, 0.45, 0.65), tecla1=(0.27, 0.33, 0.38, 0.44))),
+    dict(raw='raw6/101O1981.RAW', formato='modo 4 de fábrica (P9), curva de 10 bits',
+         color=dict(madera=(0.02, 0.20, 0.45, 0.65), tecla1=(0.28, 0.34, 0.44, 0.50))),
+    dict(raw='raw12/101O1992.RAW', formato='modo 3, u16',
+         color=dict(madera=(0.05, 0.20, 0.60, 0.80), tecla4=(0.60, 0.66, 0.44, 0.50))),
+]
+# TOL_BLANCO: el peor error medido del balance por foto (parche blanco) es 0,18; en 2020 el mouse recibe
+# además la luz del monitor. TOL_MOTORES y TOL_JPG: cada motor pone su curva de tono y su saturación; con
+# la matriz de cámara balanceada que el DNG llevaba antes, la madera se iba a 1,2–1,5 en sips.
+TOL_BLANCO, TOL_MOTORES, TOL_JPG = 0.18, 0.25, 0.25
+
+
+def color_motores(reporte):
+    """El color del DNG en motores ajenos: el de macOS (sips) y darktable-cli, si está instalado.
+
+    Las etiquetas de color del DNG (ColorMatrix, ForwardMatrix, AsShotNeutral, iluminantes, WhiteLevel)
+    sólo se prueban revelando el archivo con quien las interpreta según la norma. Con fotos reales de los
+    cuatro formatos (dump/, fuera del repo; se omite si faltan) exige, en cada motor:
+      * blanco: el mouse blanco sale neutro (|ln R/G| y |ln B/G| < TOL_BLANCO en sRGB linealizado);
+      * color: madera y teclas a menos de TOL_MOTORES (ln de R/G y B/G) del revelado de LibRaw, que es el
+        camino que supone el conversor (balance en espacio de cámara y después la matriz);
+      * modo 0: además a menos de TOL_JPG del JPG que la cámara sacó del mismo disparo.
+    Devuelve el número de fallos."""
+    d = os.path.join(RAIZ, 'dump')
+    if not all(os.path.exists(os.path.join(d, c['raw'])) for c in CASOS_COLOR):
+        reporte['color_motores'] = 'omitido: faltan las fotos de dump/'
+        print('OMITIDO color en motores externos (faltan las fotos de dump/)')
+        return 0
+    sal = os.path.join(SALIDA, 'color_motores')
+    os.makedirs(sal, exist_ok=True)
+    motores = ['sips'] + (['darktable'] if os.path.exists(DARKTABLE) else [])
+
+    def lineal(ruta):
+        v = np.asarray(Image.open(ruta).convert('RGB')).astype(np.float64) / 255
+        return np.where(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055) ** 2.4)
+
+    def parche(a, p):
+        h, w = a.shape[:2]
+        m = a[int(p[2] * h):int(p[3] * h), int(p[0] * w):int(p[1] * w)].reshape(-1, 3).mean(0)
+        return [float(np.log(m[0] / m[1])), float(np.log(m[2] / m[1]))]
+
+    def dist(a, b=(0.0, 0.0)):
+        return round(max(abs(a[0] - b[0]), abs(a[1] - b[1])), 4)
+
+    def revelar(motor, dng, jpg):
+        if motor == 'sips':
+            orden = ['sips', '-s', 'format', 'jpeg', '-Z', '1000', dng, '--out', jpg]
+        else:
+            conf = os.path.join(sal, 'darktable_conf')
+            orden = [DARKTABLE, dng, jpg, '--width', '1000', '--height', '1000', '--hq', 'false',
+                     '--apply-custom-presets', 'false', '--core', '--configdir', conf, '--cachedir', conf,
+                     '--library', ':memory:']
+        if os.path.exists(jpg):
+            os.remove(jpg)
+        p = subprocess.run(orden, capture_output=True, text=True, cwd=sal)
+        if not os.path.exists(jpg):
+            raise RuntimeError(f'{motor} no reveló {dng}: {(p.stderr or p.stdout)[-300:]}')
+        return lineal(jpg)
+
+    fallos, filas = 0, []
+    for c in CASOS_COLOR:
+        ruta = os.path.join(d, c['raw'])
+        num = os.path.basename(ruta)[4:8]
+        dng = os.path.join(sal, f'{num}.dng')
+        info = _cli_dng(ruta, dng)
+        with rawpy.imread(dng) as rp:
+            ref = rp.postprocess(use_camera_wb=True, gamma=(1, 1), no_auto_bright=True, output_bps=16,
+                                 half_size=True, user_flip=0).astype(np.float64) / 65535
+        fila = dict(raw=c['raw'], formato=c['formato'], balance=info['balance'], neutro=info['neutro'],
+                    blanco_dng=info['blanco'], motores={})
+        ref_color = {k: parche(ref, p) for k, p in c['color'].items()}
+        jpg_color = None
+        if c.get('jpg'):
+            j = lineal(os.path.join(os.path.dirname(ruta), f'101_{num}.JPG'))
+            g = ref[::8, ::8, 1]
+            cands = [np.rot90(j, k) for k in range(4)]
+            cands = [x for x in cands if (x.shape[0] > x.shape[1]) == (g.shape[0] > g.shape[1])]
+            def parecido(x):
+                y = x[::x.shape[0] // g.shape[0], ::x.shape[1] // g.shape[1], 1][:g.shape[0], :g.shape[1]]
+                return np.corrcoef(y.ravel(), g[:y.shape[0], :y.shape[1]].ravel())[0, 1]
+            j = max(cands, key=parecido)
+            jpg_color = {k: parche(j, p) for k, p in c['color'].items()}
+        ok_caso = True
+        for motor in motores:
+            a = revelar(motor, dng, os.path.join(sal, f'{num}_{motor}.jpg'))
+            if a.shape[0] > a.shape[1]:
+                raise RuntimeError(f'{motor} giró {dng}')
+            m = dict(color_vs_libraw={k: dist(parche(a, p), ref_color[k]) for k, p in c['color'].items()})
+            ok = all(v < TOL_MOTORES for v in m['color_vs_libraw'].values())
+            if 'blanco' in c:
+                b = parche(a, c['blanco'])
+                m['blanco_R_G'], m['blanco_B_G'] = round(float(np.exp(b[0])), 3), round(float(np.exp(b[1])), 3)
+                m['blanco_dist'] = dist(b)
+                ok = ok and m['blanco_dist'] < TOL_BLANCO
+            if jpg_color:
+                m['color_vs_jpg'] = {k: dist(parche(a, p), jpg_color[k]) for k, p in c['color'].items()}
+                ok = ok and all(v < TOL_JPG for v in m['color_vs_jpg'].values())
+            m['ok'] = ok
+            ok_caso = ok_caso and ok
+            fila['motores'][motor] = m
+            print(('OK   ' if ok else 'FALLO'), 'color', motor.ljust(9), c['raw'], {k: v for k, v in m.items() if k != 'ok'})
+        os.remove(dng)
+        fila['ok'] = ok_caso
+        fallos += not ok_caso
+        filas.append(fila)
+    import shutil
+    shutil.rmtree(os.path.join(sal, 'darktable_conf'), ignore_errors=True)
+    reporte['color_motores'] = dict(motores=motores, tolerancias=dict(blanco=TOL_BLANCO, motores=TOL_MOTORES, jpg=TOL_JPG),
+                                    casos=filas)
     return fallos
 
 
@@ -281,6 +406,7 @@ def main():
             print(('OK   ' if ok else 'FALLO'), base, '' if ok else det, '' if rb_ok else '(R/B invertidos: heurística)')
     fallos += balance_modo4(reporte)
     fallos += modo4_lineal(reporte)
+    fallos += color_motores(reporte)
     total = len(reporte['casos'])
     reporte['resultado'] = 'OK' if not fallos else f'{fallos} fallo(s) de {total}'
     reporte['rb_heuristica_acierta'] = f"{sum(1 for c in reporte['casos'] if c.get('rb_ok'))} de {total}"

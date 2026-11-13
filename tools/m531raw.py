@@ -237,6 +237,13 @@ def neutro_parche_blanco(img, cfa, negro, blanco, pct=98):
     return tuple(float(x) for x in np.clip(n / n[1], 0.05, 4.0))
 
 
+def fraccion_quemada(img, negro, blanco):
+    """Fracción de celdas 2×2 del mosaico con algún canal saturado (≥ 97 % de la escala)."""
+    v = img[: img.shape[0] // 2 * 2, : img.shape[1] // 2 * 2]
+    m = np.maximum(np.maximum(v[0::2, 0::2], v[0::2, 1::2]), np.maximum(v[1::2, 0::2], v[1::2, 1::2]))
+    return float((m >= negro + (blanco - negro) * 0.97).mean())
+
+
 def neutro_mundo_gris(img, cfa, negro, blanco):
     """AsShotNeutral por mundo gris: media de cada canal sin negro ni saturados, relativa a G."""
     pos = {c: [] for c in 'RGB'}
@@ -281,16 +288,48 @@ def awb_camara(ruta_raw):
 
 # ---------------------------------------------------------------- DNG
 _CFA = {'RGGB': (0, 1, 1, 2), 'BGGR': (2, 1, 1, 0), 'GRBG': (1, 0, 2, 1), 'GBRG': (1, 2, 0, 1)}
-# Matriz provisional XYZ(D65)→cámara: inversa de la CCM de luz de día de la C713 (misma
-# familia Altek). Se reemplaza al calibrar con fotos reales de la M531.
+# CCM de luz de día de la C713 (misma familia Altek): cámara balanceada → sRGB lineal. Es la de
+# --matriz c713; por omisión se usa CCM_M531, ajustada con fotos reales.
 _CCM_C713 = np.array([[150592, -88384, 3328], [-27776, 143360, -50048], [3008, -52352, 114880]]) / 65536
 _SRGB_A_XYZ = np.array([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750],
                         [0.0193339, 0.1191920, 0.9503041]])
 
 
-def _matriz_color(ccm=None):
-    cam_a_xyz = _SRGB_A_XYZ @ (_CCM_C713 if ccm is None else ccm)
-    return np.linalg.inv(cam_a_xyz)
+# Puntos blancos XYZ (Y = 1) y adaptación cromática de Bradford, para las matrices del DNG.
+_XYZ_D65 = _SRGB_A_XYZ @ np.ones(3)
+_XYZ_D50 = np.array([0.9642, 1.0, 0.8249])
+_XYZ_A = np.array([1.0985, 1.0, 0.3558])
+_BRADFORD = np.array([[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]])
+# Respuesta de la M531 (R, G, B sin balancear) al blanco bajo cada iluminante de calibración: inversa de
+# las ganancias de sus dos presets de balance, leídas del MakerNote de fotos sin flash (dump/raw20):
+# Luz día 2021 = (451, 256, 417) y Tungsteno 2020 = (248, 263, 828). Normalizadas a máximo 1.
+NEUTRO_M531_D65 = (256 / 451, 1.0, 256 / 417)
+NEUTRO_M531_A = (1.0, 248 / 263, 248 / 828)
+
+
+def _adaptacion(origen, destino):
+    """Matriz de Bradford que lleva XYZ con blanco `origen` a XYZ con blanco `destino`."""
+    return np.linalg.inv(_BRADFORD) @ np.diag((_BRADFORD @ destino) / (_BRADFORD @ origen)) @ _BRADFORD
+
+
+def matrices_dng(ccm=None):
+    """ColorMatrix1 (iluminante A), ColorMatrix2 (D65) y ForwardMatrix del DNG.
+
+    La CCM del conversor lleva cámara *ya balanceada* a sRGB lineal (filas que suman 1): es lo que hace
+    la cámara, balance en su propio espacio y después la matriz. El DNG pide otra cosa:
+      * ColorMatrix: XYZ bajo el iluminante de calibración → cámara *sin balancear*. Al blanco del
+        iluminante le corresponde el neutro de la cámara bajo esa luz, no (1, 1, 1). De ahí el factor
+        diag(neutro). Un motor que sigue la norma saca de esta matriz y de AsShotNeutral el blanco de
+        la escena; con una matriz de cámara balanceada lo saca verdoso y revela la foto con ese error.
+      * ForwardMatrix: cámara balanceada → XYZ D50. Es la CCM tal cual, llevada a D50.
+    Con las dos ColorMatrix (A y D65) el motor que interpola por temperatura reproduce, en los dos
+    extremos, el mismo camino que la ForwardMatrix."""
+    bal_a_xyz65 = _SRGB_A_XYZ @ (_CCM_C713 if ccm is None else ccm)
+    xyz65_a_bal = np.linalg.inv(bal_a_xyz65)
+    cm_a = np.diag(NEUTRO_M531_A) @ xyz65_a_bal @ _adaptacion(_XYZ_A, _XYZ_D65)
+    cm_d65 = np.diag(NEUTRO_M531_D65) @ xyz65_a_bal
+    fm = _adaptacion(_XYZ_D65, _XYZ_D50) @ bal_a_xyz65
+    return cm_a, cm_d65, fm
 
 
 def neutro_desde_jpg(ruta_raw, img, cfa):
@@ -365,7 +404,8 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
     def rac(x, d=10000):
         return (int(round(x * d)), d)
     cx, cy, cw, ch = recorte or (0, 0, w, h)
-    m = _matriz_color(ccm)
+    cm_a, cm_d65, fm = matrices_dng(ccm)
+    neutro = np.asarray(neutro, dtype=np.float64) / max(neutro)   # AsShotNeutral: máximo 1
     tag(254, 4, [0]); tag(256, 4, [w]); tag(257, 4, [h]); tag(258, 3, [16]); tag(259, 3, [1])
     tag(262, 3, [32803]); tag(271, 2, 'Kodak'); tag(272, 2, 'EasyShare M531')
     tag(273, 4, [0]); tag(274, 3, [orientacion]); tag(277, 3, [1]); tag(278, 4, [h]); tag(279, 4, [len(datos)])
@@ -375,9 +415,10 @@ def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recor
     tag(50710, 1, [0, 1, 2]); tag(50711, 3, [1])
     tag(50714, 4, [int(negro)]); tag(50717, 4, [int(blanco)])
     tag(50719, 4, [cx, cy]); tag(50720, 4, [cw, ch])
-    tag(50721, 10, [rac(v) for v in m.flatten()])
-    tag(50728, 5, [rac(v) for v in neutro])
-    tag(50778, 3, [21])
+    tag(50721, 10, [rac(v) for v in cm_a.flatten()]); tag(50722, 10, [rac(v) for v in cm_d65.flatten()])
+    tag(50728, 5, [rac(v, 1000000) for v in neutro])
+    tag(50778, 3, [17]); tag(50779, 3, [21])                 # CalibrationIlluminant1 = A, 2 = D65
+    tag(50964, 10, [rac(v) for v in fm.flatten()]); tag(50965, 10, [rac(v) for v in fm.flatten()])
     entradas.sort(key=lambda e: e[0])
     n = len(entradas)
     ifd_off = 8
@@ -426,8 +467,13 @@ CFA_M531 = 'GBRG'
 # Modo 4 de fábrica (P9): código de 10 bits con tope 0x3fc = 1020 (curva de captura, 0x1b0250). Con la
 # curva apagada (M4L/M4R) el mismo archivo de 21.150.720 B lleva 12 bits lineales y pasa de 1020 en
 # cuanto la escena tiene algo por encima de un cuarto de la escala. Una toma de M4L sin nada tan claro
-# se tomaría por comprimida: en ese caso pasar --packing p12_lsb --width 4320 --black 0 --white 4095.
+# se tomaría por comprimida: en ese caso pasar --packing p12_lsb --width 4320 --black 0 --white 3950.
 MAX_CODIGO_MODO4 = 1020
+# WhiteLevel del modo 4 lineal. El contenedor llega a 4095, pero el sensor satura antes: el firmware resta
+# el negro (≈ 120) después de saturar y deja mesetas en 3965–4085 según canal y zona (medido en 2014,
+# 2017, 2018 y 2019). Con WhiteLevel 4095 un motor externo toma esas mesetas por datos válidos y, tras el
+# balance, pinta de rosa las altas luces donde el verde está saturado. 3950 queda bajo todas.
+BLANCO_M4_LINEAL = 3950
 # CCM_M531 (más abajo): cámara balanceada → sRGB lineal, filas suman 1. Ajustada con las cinco fotos de
 # modo 0 (1970, 1971, 1978–1980) por tools/ajustar_ccm.py (Huber, curva de tono por foto); dejando una
 # escena fuera da ΔE2000 medio 2,92 contra 3,32 de la anterior (1970/1971) y 3,35 de la C713; detalle en
@@ -439,6 +485,10 @@ NEUTRO_M531 = (0.7056, 1.0, 0.5292)
 # Modo 4, balance de reserva: pares con flash 1976↔1978 y 1977↔1979, tras decodificar con la curva de
 # 10 bits. Se usa si el balance por foto (parche blanco) no da un resultado creíble, o con --balance fijo.
 NEUTRO_M531_MODO4 = (0.62, 1.0, 0.60)
+# Modo 4 lineal: por encima de esta fracción de celdas quemadas el parche blanco deja de ser fiable y se
+# usa el AWB de la cámara, salvo que sea el valor por omisión que deja cuando no llega a calcularlo.
+QUEMADO_MAX = 0.02
+AWB_OMISION = (400, 256, 456)
 # Lugar de los balances que elige la propia cámara: ganancias R/G/B del AWB guardadas en el MakerNote de
 # 67 JPG de modo 0 (fotos 1900–1971). En log caen sobre una recta: ln(nB) = LOCUS_A + LOCUS_B·ln(nR),
 # rms 0,028; el extremo cálido se aparta hasta 0,12. Un neutro estimado se acepta sólo si queda cerca.
@@ -493,8 +543,8 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
     if lineal12:
         # M4L/M4R: la curva de captura está apagada y el contenedor lleva 12 bits lineales con el negro
         # restado. La curva de fábrica no puede dar un código mayor que 1020, así que un solo valor por
-        # encima lo delata. No se decodifica; el blanco pasa a 4095.
-        perfil_info = dict(perfil, blanco=4095, negro=0)
+        # encima lo delata. No se decodifica; el blanco pasa a BLANCO_M4_LINEAL.
+        perfil_info = dict(perfil, blanco=BLANCO_M4_LINEAL, negro=0)
     elif perfil and perfil.get('decodificar10'):
         # Modo 4: la misma curva de compresión que el modo de 8 bits, con 10 bits de precisión
         # (código10 ≈ 4·código8). Verificado con pares modo0/modo4 de la misma escena: tras decodificar,
@@ -573,7 +623,18 @@ def main():
         # cámara elige. Error medido contra el AWB de la cámara en 10 fotos (modo 0 y pares de modo 4):
         # media 8 %, peor 18 %. El JPG rosado y su AWB no sirven de referencia en este modo.
         neutro = None if a.balance == 'fijo' else neutro_parche_blanco(img, info['cfa'], negro, blanco)
-        if neutro_creible(neutro):
+        # M4L con mucho quemado (flash de cerca): los blancos de la escena están saturados y lo más claro
+        # que queda sin saturar es un objeto con color (la madera), así que el parche blanco se va a cálido
+        # (error 0,21–0,31 en ln contra el mouse blanco en 2018 y 2019). En esas tomas el AWB de la cámara sí
+        # se calculó (deja de ser el valor por omisión) y acierta (0,04–0,08): se usa ése.
+        awb = awb_camara(a.archivos[0])
+        info['quemado'] = round(fraccion_quemada(img, negro, blanco), 4)
+        n_awb = (awb[1] / awb[0], 1.0, awb[1] / awb[2]) if awb else None
+        if (a.balance == 'auto' and info.get('modo4') == 'lineal12' and info['quemado'] > QUEMADO_MAX
+                and awb and tuple(awb) != AWB_OMISION and neutro_creible(n_awb)):
+            info['parche_blanco_descartado'] = None if neutro is None else [round(x, 4) for x in neutro]
+            neutro, info['balance'] = n_awb, 'awb_camara'
+        elif neutro_creible(neutro):
             info['balance'] = 'parche_blanco'
         else:
             info['parche_blanco_descartado'] = None if neutro is None else [round(x, 4) for x in neutro]

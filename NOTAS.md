@@ -1461,3 +1461,61 @@ M4L + M4Q + M4W. Pasos en la cámara: `sd_kit/PASOS.md`, paso 10.
 - Blanco de referencia: el mouse blanco (más blanco que las teclas). En 2017 (vista cenital) y 2018 el mouse
   satura en parte (3,8 % de píxeles a 254+); las zonas claras sin saturar salen neutras (R/G 1,00–1,01,
   B/G 0,98–1,00). En 2015/2016 los claros mezclan madera y salen cálidos (R/G 1,19–1,25).
+
+## 2026-11-12 — DNG verdoso en Vista Previa: matriz de cámara balanceada donde la norma pide cámara sin balancear
+
+**Síntoma.** Los DNG de `m531raw.py` salían amarillo-verdosos en el motor RAW de macOS (Vista Previa, `sips`):
+madera amarilla saturada, con el blanco casi bien. El JPG de la cámara y el revelado propio salían bien.
+
+**Causa.** `CCM_M531` lleva cámara *ya balanceada* a sRGB lineal (filas que suman 1), que es el camino de la
+cámara: balance en su espacio y después la matriz. El DNG escribía en `ColorMatrix1` la inversa de eso, con
+iluminante D65. La norma DNG 1.4 pide en `ColorMatrix` XYZ → cámara *sin balancear*: al blanco D65 le toca
+el neutro de la cámara con luz de día, y la matriz escrita le daba (1, 1, 1). Un motor que sigue la norma
+aplica la matriz a los datos sin balancear y corrige el blanco después con una adaptación cromática en XYZ:
+el blanco queda neutro y todo lo que tiene color se va a amarillo. LibRaw y darktable normalizan las filas de
+la matriz y por eso casi no lo notaban. No había `ForwardMatrix` ni segundo iluminante.
+
+**Arreglo en `m531raw.py`** (`matrices_dng`)
+- `ColorMatrix2` (D65) = diag(neutro luz día) · inv(sRGB→XYZ · CCM). `ColorMatrix1` (iluminante A) = diag(neutro
+  tungsteno) · inv(sRGB→XYZ · CCM) · Bradford(A→D65). `CalibrationIlluminant1/2` = 17 y 21.
+- Neutros de la cámara: inversa de las ganancias de sus presets en el MakerNote de fotos sin flash de
+  `dump/raw20`: Luz día 2021 = (451, 256, 417), Tungsteno 2020 = (248, 263, 828).
+- `ForwardMatrix1/2` = Bradford(D65→D50) · sRGB→XYZ · CCM: el camino del conversor, para los motores que la usan.
+- `AsShotNeutral` normalizado a máximo 1 (antes relativo a G, con R > 1 en luz cálida).
+- La matriz es la misma `CCM_M531`; el mosaico no cambia.
+
+**Dos fallos más que el revelado en darktable destapó, en el modo 4 lineal (M4L)**
+- *Altas luces rosadas.* `WhiteLevel` era 4095, pero el sensor satura antes: el firmware resta el negro (≈ 120)
+  después de saturar y quedan mesetas en 3965–4085 según canal y zona (2014, 2017, 2018, 2019). El motor las
+  tomaba por datos válidos y el verde saturado quedaba corto tras el balance. `BLANCO_M4_LINEAL` = 3950.
+- *Balance con flash de cerca.* Con el blanco quemado, lo más claro sin saturar es la madera y el parche blanco
+  se va a cálido: contra el mouse blanco, error (máx. |ln| en R y B) 0,31 en 2018 y 0,21 en 2019. En esas tomas
+  el AWB de la cámara sí se calcula y acierta (0,08 y 0,04). Regla: M4L con más de 2 % de celdas quemadas y AWB
+  distinto del valor por omisión (400, 256, 456) → balance `awb_camara`. Aplica a 2017, 2018 y 2019.
+
+**Medido** (sRGB linealizado del revelado; conversor anterior → nuevo)
+
+| foto | parche | sips | darktable 5.6.2 |
+| --- | --- | --- | --- |
+| 2020 (M4L, tungsteno) | madera B/G (JPG de la cámara 0,96) | 0,21 → 0,88 | 0,74 → 0,85 |
+| 2020 | mouse R/G, B/G | 0,94, 1,19 → 0,95, 1,12 | 0,93, 1,20 → 0,93, 1,16 |
+| 2019 (M4L, flash, 27 % quemado) | mouse R/G, B/G | 0,99, 1,02 → 1,00, 1,00 | 1,00, 1,09 → 1,00, 1,01 |
+| 2019 | zona rosada del mouse R/G, B/G | — | 1,06, 1,19 → 1,00, 1,00 |
+| 2017 (M4L, flash) | mouse R/G, B/G | 1,00, 1,00 → 1,00, 1,00 | 1,02, 1,03 → 1,00, 0,98 |
+| 1983 (modo 0) | madera, distancia al JPG (ln) | 1,58 → 0,02 | 0,29 → 0,11 |
+| 1981 (P9) | madera, distancia a LibRaw (ln) | 1,54 → 0,07 | 0,02 → 0,03 |
+| 1992 (modo 3) | madera, distancia a LibRaw (ln) | 0,52 → 0,02 | 0,13 → 0,10 |
+
+- Queda: en 2020 y 2021 el mouse sale 12–16 % azulado. Es el balance por foto (parche blanco, error 0,09 contra
+  el mouse; recibe además luz del monitor), no las etiquetas. El JPG de la cámara lo deja más azul (B/G 1,41).
+  Subir el percentil del parche a 99,5 arregla esas dos y empeora los pares de modo 4 de `raw4`/`raw6`; no se tocó.
+- Queda: los DNG de fotos verticales salen apaisados (la cámara gira el JPG y deja `Orientation` = 1).
+
+**Prueba E2E.** `tools/e2e_raw.py`, `color_motores`: seis fotos reales de los cuatro formatos (M4L ×3, modo 0,
+P9, modo 3) reveladas con `sips` y con `darktable-cli` si está. Exige el mouse neutro (tolerancia 0,18), madera
+y teclas a menos de 0,25 del revelado de LibRaw y, en modo 0, a menos de 0,25 del JPG de la cámara. Con el
+conversor anterior fallan cinco de los seis casos. Reporte y revelados en `work/e2e_raw/`.
+
+**Archivos.** Regenerados todos los DNG de `dump/raw*/` (carpetas `dng`, `dng_v2` y los sueltos de raw1, raw2,
+raw12, raw13). `convertir_carpeta.py` acepta `--sobrescribir`. Para el usuario: `~/Pictures/m531_dng/raw11` …
+`raw20` (28 DNG con su JPG al lado; raw16 no tiene RAW).

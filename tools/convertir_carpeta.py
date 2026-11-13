@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Convierte todos los RAW de la M531 de una carpeta (p. ej. DCIM/101KM531 de la SD) a DNG.
 
-uso: .venv/bin/python tools/convertir_carpeta.py CARPETA_ORIGEN CARPETA_DESTINO
+uso: .venv/bin/python tools/convertir_carpeta.py CARPETA_ORIGEN CARPETA_DESTINO [--sobrescribir]
 
 - Busca 101O####.RAW (y su JPG hermano 101_####.JPG para el balance de blancos).
-- Escribe 101_####.DNG en el destino; no sobrescribe DNG existentes.
+- Escribe 101_####.DNG en el destino; no sobrescribe DNG existentes salvo con --sobrescribir.
 - Copia el JPG hermano al destino para tener el par junto.
 - Deja un resumen.json con formato, balance y errores por archivo.
 No escribe nada en la carpeta de origen.
@@ -20,9 +20,11 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
-    if len(sys.argv) != 3:
+    args = [a for a in sys.argv[1:] if a != '--sobrescribir']
+    sobrescribir = len(args) != len(sys.argv) - 1
+    if len(args) != 2:
         sys.exit(__doc__)
-    origen, destino = sys.argv[1], sys.argv[2]
+    origen, destino = args
     os.makedirs(destino, exist_ok=True)
     resumen = []
     raws = sorted(f for f in os.listdir(origen) if re.fullmatch(r'\d{3}O\d{4}\.RAW', f, re.I))
@@ -31,7 +33,7 @@ def main():
         dng = os.path.join(destino, f'{f[:3]}_{num}.DNG')
         jpg = os.path.join(origen, f'{f[:3]}_{num}.JPG')
         item = dict(raw=f)
-        if os.path.exists(dng):
+        if os.path.exists(dng) and not sobrescribir:
             item.update(estado='ya existía')
             resumen.append(item)
             continue
@@ -44,7 +46,8 @@ def main():
         else:
             info = json.loads(p.stdout)
             item.update(estado='ok', formato=f"{info['packing']} {info['ancho']}x{info['alto']}",
-                        cfa=info['cfa'], balance=info.get('balance'), neutro=info.get('neutro'))
+                        cfa=info['cfa'], balance=info.get('balance'), neutro=info.get('neutro'),
+                        blanco=info.get('blanco'))
         resumen.append(item)
         print(item['estado'].ljust(10), f, item.get('formato', ''), item.get('error', ''))
     json.dump(resumen, open(os.path.join(destino, 'resumen.json'), 'w'), indent=1, ensure_ascii=False)
