@@ -279,6 +279,39 @@ Antes: `python3 -I tools/e2e_scripts.py` (53 casos). Quickview en **On**. Zoom d
    balance fijo evita el AWB del modo 4.
 8. No usar el modo 0 con este kit cargado: apagar primero.
 
+## Paso 11 — M4S: un solo disparo en memoria (kit diario + M4S, sólo RAM) — por probar
+Análisis: `../NOTAS.md`, sección "Prueba de estrés del kit diario". Con el RAW de 21,15 MB, tocar el
+disparador mientras la foto anterior se procesa daña su JPG y un disparo completo puede colgar la
+cámara: la memoria del RAW está repartida en dos ranuras de 14,1 MB y el RAW del modo 4 ocupa la primera
+y media segunda. M4S escribe **una palabra de datos** (la reserva de cola del reparto, `0x3dbde0`, de 0
+a 7.050.240) para que el reparto dé una sola ranura. Con una ranura, la cámara entra tras cada foto en
+su estado de fábrica de "memoria llena" y no atiende el disparador hasta soltar el RAW.
+
+1. Claude deja en `Batch/` de la SD los siete archivos de `m4_diario_s/Batch` (M4L, M4Q, M4W, M4S, EET,
+   EETV y `BatchScripts.txt`, en ese orden). Preparación como en el paso 1 (verificador, `cp -X`,
+   `dot_clean`, verificador sobre la SD, hashes).
+2. Cámara apagada, SD puesta, encender. Esperar a que desaparezca "Run…".
+3. Prueba A (uso normal): tres fotos **esperando 15 s** entre una y otra, sin flash. Anotar cuánto
+   tarda en volver la vista en vivo tras cada foto.
+4. Prueba B (lo que antes fallaba): una foto y, sin esperar, apretar el disparador a fondo varias veces
+   durante 10 s. Anotar qué hace la cámara (no responde, muestra un aviso, dispara al final). Repetir
+   una vez con flash.
+5. Apagar, sacar la SD, traerla al Mac.
+6. Esperado en los `.LOG`: los del kit diario (paso 10; `EET.LOG` y `EETV.LOG` con `4472856`) y
+   - `M4S.LOG`: `VERIFY: 4`, `34856960`, `63057920`, `0`, `0`, `7050240`.
+7. Esperado en las fotos: todos los JPG enteros (sin franjas ni bloques), un RAW de 21.150.720 B por
+   JPG, y en la prueba B ninguna foto tomada mientras la anterior se procesaba.
+8. Cómo leer un resultado distinto:
+   - `M4S.LOG` con sólo un número ≠ 4: M4L no dejó el modo 4. Con `4` y un número ≠ 34856960, o un
+     tercero ≠ 63057920: la estructura no es la del volcado; M4S no escribió. Con un cuarto o quinto
+     número ≠ 0: ya había una reserva; M4S no escribió. Anotar los números.
+   - La cámara se detiene al encender con el texto de una línea de M4S en pantalla o en el log: es la
+     primera vez que corre `IF v == 0`. Batería y SD fuera; quitar `M4S` de `BatchScripts.txt`.
+   - La cámara se queda en la revisión sin volver a la vista en vivo (más de 30 s): el RAW no se soltó.
+     Batería y SD fuera; nada queda escrito. Volver al kit diario y traer la SD con los `.LOG`.
+   - JPG con franjas en la prueba B: la espera no cubre el caso. Traer la SD tal cual.
+9. Con M4S no usar ráfaga ni panorama. Para volver al kit diario basta quitar `M4S` de la lista.
+
 ## Para deshacer todo
 Borrar de la SD: `HiddenMenu/`, `ENABLE_NAND_TOOL`, `DISABLE_AUTO_POWER_OFF`, `Batch/` (incluye los
 `*.log` del intérprete), `TP$BATCH` y `TEMP.SRT` si aparecen en la raíz, y los `._*`, `.fseventsd`,

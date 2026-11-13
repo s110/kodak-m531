@@ -1,0 +1,26 @@
+10 REM M4S EXPERIMENTAL: una sola ranura de RAW en el pool 8 (reserva de cola de 7050240 B): con el RAW de 21.15 MB la camara espera a soltarlo antes de aceptar otro disparo; va DESPUES de M4L, M4Q y M4W: solo RAM
+20 FOREIGN m = Run_SpecifyFunc(1674172, 1, 0, 4036520, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY m
+40 IF m == 4 THEN 60
+50 END
+60 FOREIGN a = Run_SpecifyFunc(1674172, 1, 0, 4046292, 0, 0, 0, 0, 0)
+70 LOG_PRINT VERIFY a
+80 IF a == 34856960 THEN 100
+90 END
+100 FOREIGN b = Run_SpecifyFunc(1674172, 1, 0, 4046296, 0, 0, 0, 0, 0)
+110 LOG_PRINT VERIFY b
+120 IF b == 63057920 THEN 140
+130 END
+140 FOREIGN c = Run_SpecifyFunc(1674172, 1, 0, 4046300, 0, 0, 0, 0, 0)
+150 LOG_PRINT VERIFY c
+160 IF c == 0 THEN 180
+170 END
+180 FOREIGN d = Run_SpecifyFunc(1674172, 1, 0, 4046304, 0, 0, 0, 0, 0)
+190 LOG_PRINT VERIFY d
+200 IF d == 0 THEN 220
+210 END
+220 FOREIGN p = Run_SpecifyFunc(3050116, 2, 0, 4046304, 7050240, 0, 0, 0, 0)
+230 FOREIGN e = Run_SpecifyFunc(1674172, 1, 0, 4046304, 0, 0, 0, 0, 0)
+240 LOG_PRINT VERIFY e
+250 END
+RUN

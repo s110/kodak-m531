@@ -73,6 +73,23 @@ Cómo puede fallar el verificador (escrito antes del código; cada punto es un c
       cambia otros bytes. Se ejecuta entero sobre el firmware de fábrica con M4L y M4Q encima, en
       cinco estados, y un control con el valor escrito cambiado.
   F21. El juego M4L + M4Q + M4W, armado como va a la SD, no pasa el verificador o está en otro orden.
+  F22. M4S (una sola ranura de RAW) escribe una palabra que no es la reserva de cola del reparto del
+      pool 8, o esa palabra no decide la cuenta de ranuras. Se coteja con el firmware de fábrica y con
+      la RAM volcada, no con los números del script: el literal de `0x12ab9c` es la estructura
+      (`0x3dbdcc`); `0x12aba4` calcula ranuras = (tamaño − [S+0x10] − [S+0x14]) / tamaño de ranura
+      (instrucciones de `0x12abfc–0x12ac0f`) con el tamaño de ranura que le pasa `0xf08b4`
+      (`mov_s r0,8` y `bl 0x12aba4`); la puesta a cero (`0x12ab4e`, `0x12ab50`) está en `0x12ab20`,
+      que tiene una sola llamada (`0xf07a2`, dentro de `0xf0758`, llamada sólo desde `0x1fdb04`); el
+      otro escritor de `[S+0x14]` es `0x12b140` (una llamada, `0x13d9c6`). Con los valores de la RAM
+      (pool 8 = `0x213e000`, `0x1ae5000` B) la cuenta debe pasar de 2 a 1 y la ranura que queda debe
+      contener entero el RAW del modo 4 (21.150.720 B).
+  F23. M4S escribe con el modo de captura distinto de 4, con la estructura sin iniciar o con otro
+      pool (base o fin distintos de los del volcado), con una reserva de cabeza o de cola ya puesta,
+      no relee, o cambia otros bytes. Se ejecuta entero sobre una memoria con esas palabras en siete
+      estados, y un control con el valor escrito cambiado.
+  F24. El kit diario (`m4_diario`) o su variante con M4S (`m4_diario_s`) no pasan el verificador, la
+      variante nombra los scripts en otro orden (M4S antes de M4L encuentra el modo 0 y no escribe),
+      o sus copias de M4L, M4Q, M4W, EET y EETV difieren de las del kit diario probado en la cámara.
 
 Corre la CLI de verdad sobre carpetas armadas en work/e2e_scripts/. Artefacto:
 work/e2e_scripts/reporte.json (veredicto por caso, salida de la CLI y SHA-256 de cada script).
@@ -154,6 +171,27 @@ M4W_FABRICA = {
 M4W_LLAMADAS = {0x1b02e0: 0x1229e8, 0x122944: 0x148c52,          # constructor de la tabla: una llamada cada uno
                 0x18fcf8: 0x147828, 0x18fcc0: 0x147830, 0x18fcdc: 0x147836}
 PARCHES_ENCADENADOS['M4W'] = {0x1b03be: ('codigo', 0x0038, 0x0030)}
+# M4S: reparto del pool 8 (RAW) en ranuras, leído en el desensamblado de 0x12aba4. S = literal de
+# 0x12ab9c; [S+8]/[S+0xc] = base y fin del pool (los pone 0x12ab20 al arrancar); [S+0x10]/[S+0x14] =
+# reservas de cabeza y de cola. Palabras de 16 bits (LE) del firmware de fábrica.
+M4S_LITERAL, M4S_POOL, M4S_ANCHO, M4S_ALTO, M4S_RAW_MODO4 = 0x12ab9c, 8, 4320, 3264, 21_150_720
+M4S_FABRICA = {
+    0x12abd6: 0x17c8, 0x12abd8: 0xf00f,  # ld r15,[pcl,-56]   (S, literal de 0x12ab9c)
+    0x12abfc: 0x13fc, 0x12abfe: 0xb001,  # ld r1,[fp,-4]      (tamaño del pool)
+    0x12ac00: 0x8704,                    # ld_s r0,[r15,0x10] (reserva de cabeza)
+    0x12ac02: 0x7902,                    # sub_s r1,r1,r0
+    0x12ac04: 0x8705,                    # ld_s r0,[r15,0x14] (reserva de cola)
+    0x12ac06: 0x200e, 0x12ac08: 0x0040,  # rsub r0,r0,r1
+    0x12ac0a: 0x712a,                    # mov_s r1,r17       (tamaño de ranura)
+    0x12ac0c: 0x0ae6, 0x12ac0e: 0xeec0,  # bl 0x3086f0        (división sin signo)
+    0x12ac10: 0x709a,                    # mov_s r20,r0       (cuenta de ranuras)
+    0x12ab4e: 0xa6a4, 0x12ab50: 0xa6a5,  # st_s r13,[r14,0x10] / [r14,0x14] con r13 = 0 (arranque)
+    0x12b16c: 0xa645,                    # st_s r2,[r14,0x14] (0x12b140, reserva de cola pedida)
+    0xf08e4: 0xd808,                     # mov_s r0,0x8       (pool 8)
+    0xf08f6: 0x0ab2, 0xf08f8: 0x1d00,    # bl 0x12aba4
+}
+M4S_LLAMADAS = {0x12aba4: [0xf08f6], 0x12ab20: [0xf07a2], 0xf0758: [0x1fdb04], 0x12b140: [0x13d9c6]}
+M4S_TABLA_POOLS, M4S_GESTOR = 0x3e7c40, 0x4964dc     # tabla de pools (entradas de 0x18 B) y su gestor
 TABLAS = {'FOREIGN': 0x486334, 'SYSTEM': 0x4871f4, 'DEBUGGING': 0x487404}
 TIPOS = {0: 'int', 1: 'float', 2: 'str', 6: 'void'}
 # ORI: compuerta del sensor de orientación, leída en el desensamblado de 0xf02a0. El literal de
@@ -491,6 +529,59 @@ def revisar_m4w(crudo):
     return not problemas, f'{len(estados)} estados; problemas: {problemas}'
 
 
+def datos_m4s():
+    """Direcciones y valores de M4S sacados del firmware de fábrica y de la RAM volcada."""
+    fw, ram = open(STOCK, 'rb').read(), open(RAM, 'rb').read()
+    s = int.from_bytes(fw[M4S_LITERAL - STOCK_BASE:M4S_LITERAL - STOCK_BASE + 4], 'little')
+    r32 = lambda d: int.from_bytes(ram[d:d + 4], 'little')
+    tabla, mapa, n = r32(M4S_GESTOR + 8), r32(M4S_GESTOR + 0x10), r32(M4S_GESTOR + 0x14)
+    indice = r32(mapa + 4 * M4S_POOL) if M4S_POOL < n else None
+    base, tam = r32(tabla + indice * 0x18 + 0xc), r32(tabla + indice * 0x18 + 0x10)
+    ranura = (M4S_ANCHO * M4S_ALTO + 0x3ff) >> 10 << 10      # 0xf08b4: ancho·alto redondeado a 1 KB
+    return dict(s=s, tabla=tabla, base=base, tam=tam, ranura=ranura,
+                ram={k: r32(s + k) for k in (8, 0xc, 0x10, 0x14)})
+
+
+def revisar_m4s(crudo):
+    """F23: M4S entero sobre una memoria con el modo y las cuatro palabras de la estructura."""
+    d = datos_m4s()
+    s, base, fin = d['s'], d['base'], d['base'] + d['tam']
+    cola = d['tam'] - M4S_RAW_MODO4
+
+    def palabras(modo, b, f, cabeza, c):
+        m = {}
+        for dir_ram, v in ((M4Q_MODO, modo), (s + 8, b), (s + 0xc, f), (s + 0x10, cabeza), (s + 0x14, c)):
+            m.update({dir_ram + k: v >> 8 * k & 0xff for k in range(4)})
+        return m
+    estados = {  # nombre: (modo, base, fin, cabeza, cola, log, escribe)
+        'modo 4, estructura del volcado': (4, base, fin, 0, 0, [4, base, fin, 0, 0, cola], True),
+        'modo 0': (0, base, fin, 0, 0, [0], False),
+        'estructura sin iniciar': (4, 0, 0, 0, 0, [4, 0], False),
+        'otro pool (base)': (4, base + 0x1000, fin, 0, 0, [4, base + 0x1000], False),
+        'otro pool (fin)': (4, base, fin - 0x1000, 0, 0, [4, base, fin - 0x1000], False),
+        'cabeza reservada': (4, base, fin, 0x5800, 0, [4, base, fin, 0x5800], False),
+        'ya aplicado': (4, base, fin, 0, cola, [4, base, fin, 0, cola], False),
+    }
+    problemas = []
+    for nombre, (modo, b, f, cabeza, c, log_esperado, escribe) in estados.items():
+        previo = palabras(modo, b, f, cabeza, c)
+        mem = dict(previo)
+        try:
+            log, ops = simular(crudo, mem)
+        except (KeyError, ValueError) as e:
+            problemas.append(f'{nombre}: {type(e).__name__} {e}')
+            continue
+        escrituras = [o for o in ops if o[0] == 'w']
+        tocados = {x for x in mem if mem[x] != previo[x]}
+        bien = (escrituras == [('w', s + 0x14, 4, cola)] and tocados <= set(range(s + 0x14, s + 0x18))
+                and ops[-1] == ('r', s + 0x14, 4, cola)
+                and (d['tam'] - cabeza - cola) // d['ranura'] == 1 and d['tam'] - cola >= M4S_RAW_MODO4) \
+            if escribe else (not escrituras and not tocados)
+        if not bien or log != log_esperado:
+            problemas.append(f'{nombre}: log {log}, escrituras {escrituras}, bytes tocados {sorted(map(hex, tocados))}')
+    return not problemas, f'{len(estados)} estados; problemas: {problemas}'
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     os.makedirs(OUT)
@@ -645,6 +736,46 @@ def main():
     anotar('sd_m4lqw_lista', 'F21', lista == ['M4L', 'M4Q', 'M4W'], f'BatchScripts_M4LQW.txt = {lista}')
     debe_pasar('sd_m4lqw', 'F21',
                carpeta('sd_m4lqw', {n + '.srt': leer('fase1', 'Batch', n + '.srt') for n in lista}, lista))
+
+    # F22: M4S contra el firmware de fábrica y la RAM volcada
+    m4s = leer('m4_diario_s', 'Batch', 'M4S.srt')
+    d = datos_m4s()
+    leidas = {x: medias(x, 1)[0] for x in M4S_FABRICA}
+    llamadas = {f: sorted(x for clase, x in referencias_a(f) if clase == 'bl') for f in M4S_LLAMADAS}
+    usadas = [int(x) for x in re.findall(r'Run_SpecifyFunc\(\d+, \d+, 0, (\d+),', m4s.decode('ascii'))]
+    escrito = [int(x) for x in re.findall(r'Run_SpecifyFunc\(3050116, 2, 0, \d+, (\d+),', m4s.decode('ascii'))]
+    antes = (d['tam'] - d['ram'][0x10] - d['ram'][0x14]) // d['ranura']
+    despues = [(d['tam'] - d['ram'][0x10] - v) // d['ranura'] for v in escrito]
+    anotar('m4s_reparto_del_pool', 'F22',
+           leidas == M4S_FABRICA and llamadas == M4S_LLAMADAS and d['s'] == 0x3dbdcc
+           and usadas == [M4Q_MODO, d['s'] + 8, d['s'] + 0xc, d['s'] + 0x10, d['s'] + 0x14, d['s'] + 0x14, d['s'] + 0x14]
+           and d['ram'] == {8: d['base'], 0xc: d['base'] + d['tam'], 0x10: 0, 0x14: 0}
+           and (d['base'], d['tam'], d['ranura']) == (0x213e000, 0x1ae5000, 14_100_480)
+           and antes == 2 and despues == [1] and escrito == [d['tam'] - M4S_RAW_MODO4],
+           f"S = {d['s']:#x}; pool 8 = {d['base']:#x} + {d['tam']:#x}; ranura {d['ranura']} B; ranuras {antes} -> "
+           f"{despues} con cola {escrito}; la ranura 1 de fábrica empieza en {d['base'] + d['ranura']:#x} y un RAW "
+           f"de modo 4 ahí acabaría en {d['base'] + d['ranura'] + M4S_RAW_MODO4:#x}; llamadas {llamadas == M4S_LLAMADAS}; "
+           f'palabras distintas: {[hex(x) for x in M4S_FABRICA if leidas[x] != M4S_FABRICA[x]]}')
+
+    # F23: M4S ejecutado, y control
+    ok, detalle = revisar_m4s(m4s)
+    anotar('m4s_simulado', 'F23', ok, detalle)
+    ok, detalle = revisar_m4s(mutar(m4s, ', 7050240, 0, 0, 0, 0)', ', 7050241, 0, 0, 0, 0)'))
+    anotar('m4s_control_valor_cambiado', 'F23', not ok and 'modo 4, estructura del volcado: log' in detalle, detalle)
+    ok, detalle = revisar_m4s(mutar(m4s, 'IF m == 4 THEN 60', 'IF m == 0 THEN 60'))
+    anotar('m4s_control_guardia_de_modo', 'F23', not ok and 'modo 0: log' in detalle and 'escrituras [(' in detalle, detalle)
+
+    # F24: el kit diario y su variante con M4S, tal como van a la SD
+    for kit in ('m4_diario', 'm4_diario_s'):
+        debe_pasar(f'kit_{kit}', 'F24', os.path.join(KIT, kit, 'Batch'))
+    lista = leer('m4_diario_s', 'Batch', 'BatchScripts.txt').decode().split()
+    comunes = ['M4L', 'M4Q', 'M4W', 'EET', 'EETV']
+    distintos = [n for n in comunes
+                 if leer('m4_diario_s', 'Batch', n + '.srt') != leer('m4_diario', 'Batch', n + '.srt')]
+    anotar('kit_m4_diario_s_lista', 'F24',
+           lista == ['M4L', 'M4Q', 'M4W', 'M4S', 'EET', 'EETV'] and not distintos
+           and leer('m4_diario', 'Batch', 'BatchScripts.txt').decode().split() == comunes,
+           f'BatchScripts.txt = {lista}; scripts distintos del kit diario: {distintos}')
 
     # F1 + F8: el script que colgó la cámara, tal cual quedó respaldado
     colgado = open(os.path.join(COLGADO, 'EET.srt'), 'rb').read()

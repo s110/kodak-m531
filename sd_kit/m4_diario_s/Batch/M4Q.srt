@@ -1,0 +1,33 @@
+10 REM M4Q EXPERIMENTAL: revision tras el disparo en modo 4 (conversor de la revision con RAW de 12 bits y cuadro completo); va DESPUES de M4L: solo RAM
+20 FOREIGN m = Run_SpecifyFunc(1674172, 1, 0, 4036520, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY m
+40 IF m == 4 THEN 60
+50 END
+60 FOREIGN a = Run_SpecifyFunc(472806, 1, 0, 1347286, 0, 0, 0, 0, 0)
+70 LOG_PRINT VERIFY a
+80 IF a == 49220 THEN 100
+90 END
+100 FOREIGN b = Run_SpecifyFunc(472806, 1, 0, 1347288, 0, 0, 0, 0, 0)
+110 LOG_PRINT VERIFY b
+120 IF b == 28682 THEN 140
+130 END
+140 FOREIGN p = Run_SpecifyFunc(1306778, 2, 0, 1347286, 51012, 0, 0, 0, 0)
+150 FOREIGN c = Run_SpecifyFunc(472806, 1, 0, 1347286, 0, 0, 0, 0, 0)
+160 LOG_PRINT VERIFY c
+170 IF c == 51012 THEN 190
+180 END
+190 FOREIGN q = Run_SpecifyFunc(1306778, 2, 0, 1347288, 55300, 0, 0, 0, 0)
+200 FOREIGN d = Run_SpecifyFunc(472806, 1, 0, 1347288, 0, 0, 0, 0, 0)
+210 LOG_PRINT VERIFY d
+220 IF d == 55300 THEN 240
+230 END
+240 FOREIGN f = Run_SpecifyFunc(1674172, 1, 0, 1412824, 0, 0, 0, 0, 0)
+250 FOREIGN g = Run_SpecifyFunc(1674172, 1, 0, 1478360, 0, 0, 0, 0, 0)
+260 FOREIGN h = Run_SpecifyFunc(1674172, 1, 0, 1543896, 0, 0, 0, 0, 0)
+270 FOREIGN i = Run_SpecifyFunc(1674172, 1, 0, 1609432, 0, 0, 0, 0, 0)
+280 FOREIGN j = Run_SpecifyFunc(1674172, 1, 0, 1674968, 0, 0, 0, 0, 0)
+290 FOREIGN k = Run_SpecifyFunc(1674172, 1, 0, 1740504, 0, 0, 0, 0, 0)
+300 FOREIGN l = Run_SpecifyFunc(1674172, 1, 0, 1806040, 0, 0, 0, 0, 0)
+310 FOREIGN n = Run_SpecifyFunc(1674172, 1, 0, 1871576, 0, 0, 0, 0, 0)
+320 END
+RUN

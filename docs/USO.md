@@ -9,7 +9,8 @@ Todo queda en RAM: apagando la cámara vuelve a fábrica.
 
 | Para qué | `BatchScripts.txt` | Qué sale |
 |---|---|---|
-| **Uso normal con RAW** | `M4L`, `M4Q`, `M4W` (copiar `BatchScripts_M4LQW.txt`) | RAW lineal de 12 bits (21,2 MB), JPG correcto, revisión correcta |
+| **Uso normal con RAW** | kit diario `sd_kit/m4_diario`: `M4L`, `M4Q`, `M4W`, `EET`, `EETV` | RAW lineal de 12 bits (21,2 MB), JPG correcto y sin realce, revisión correcta |
+| Lo mismo, con espera forzada entre fotos (**por probar**) | `sd_kit/m4_diario_s`: el kit diario más `M4S` | Igual; la cámara debería rechazar el disparador hasta terminar el procesado de la foto anterior |
 | RAW con el JPG y el balance automático de fábrica | `P8` (lista `P8`, o `P8` + `EE0` de `sd_kit/fase3`) | RAW de 8 bits con curva (14,1 MB), JPG y revisión de fábrica |
 | Sólo JPG | SD sin `Batch/`, o cámara sin SD de scripts | JPG de fábrica |
 
@@ -19,7 +20,20 @@ balance automático; con `M4L` sin flash no lo calcula y el JPG sale cálido sal
 
 ## 2. Cómo disparar
 
-- **Una foto por vez.** Espera a que termine de guardar y vuelva la vista en vivo antes de la siguiente.
+- **Una foto por vez, y 15 segundos entre disparo y disparo.** Después de disparar, suelta el
+  disparador y no lo toques (tampoco a medias) hasta que la vista en vivo vuelva sola. Medido en la
+  prueba de estrés del 2026-11-13 (16 fotos, SD del kit):
+  - el RAW termina de escribirse 4 a 7 s después del disparo y el JPG 8 a 12 s después (hasta 19 s si
+    se dispara encima);
+  - las 12 fotos con 14 s o más hasta el disparo siguiente salieron perfectas;
+  - las 3 fotos con el disparo siguiente a 8–12 s tienen **el JPG con franjas de ruido o un bloque
+    negro** en el tercio inferior del encuadre. Su RAW y su DNG están intactos, y la foto siguiente
+    también: lo que se pierde es el JPG de la foto que todavía se estaba procesando.
+  - Un disparo durante el procesado de la anterior puede además colgar la cámara (una foto de la
+    prueba quedó sin JPG). El RAW ya escrito se conserva.
+- **Tras encender, espera a que desaparezca "Run…"** (unos 10 s con el kit diario) antes de disparar.
+- **Sin ráfaga ni panorama** con el kit de 12 bits: el RAW de 21 MB ocupa las dos ranuras de memoria que
+  la cámara reserva para dos fotos seguidas.
 - **Sin zoom digital.** El zoom óptico sí.
 - **Apaga antes de cambiar de kit** y antes de sacar la SD. No mezcles kits en una misma sesión.
 - **Interior con luz cálida: preset Tungsteno** en el menú de balance de blancos. Con M4L y sin flash el
@@ -94,7 +108,8 @@ JPG de la cámara.
 | Foto vertical sale acostada | `m531raw.py rotar --rotar izq …` (o `der`), o `--verticales` al importar |
 | Altas luces rosadas | No deberían salir (tope del RAW en 3950). Si salen, baja el punto blanco en el módulo de punto negro/blanco raw de darktable |
 | `no se pudo convertir` en el resumen | RAW truncado (cámara apagada o colgada al guardar). La copia queda en `dump/<fecha>/`; las demás fotos se convierten igual |
-| RAW sin JPG | Normal en modo 3 o si la cámara se colgó: el DNG se hace igual, con el balance de la escena |
+| RAW sin JPG | Normal en modo 3 o si la cámara se colgó o se apagó mientras procesaba (por ejemplo, por disparar encima de la foto anterior): el DNG se hace igual, con el balance de la escena |
+| JPG con franjas de ruido violeta o un bloque negro abajo | Se tocó el disparador antes de que terminara de procesar esa foto. El RAW está bien: usa el DNG. Espera 15 s entre fotos |
 | El JPG de la cámara sale naranja | M4L sin flash con balance automático: usa el preset Tungsteno, o quédate con el DNG |
 | La revisión sale con ruido o verdosa | Falta `M4Q` (ruido) o `M4W` (verde) en `BatchScripts.txt` |
 | La cámara se cuelga | Batería y SD fuera unos segundos. Revisa el `.LOG` del script en `dump/<fecha>/` |

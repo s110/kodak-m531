@@ -14,8 +14,12 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
     y con la pantalla con ruido.
   - `M4L` + `M4Q` + `M4W` (probado): modo 4 con 12 bits lineales, JPG y revisión correctos. Es el kit
     de uso. `M3V` y `M2V` quedan como experimentales; ver `sd_kit/PASOS.md`.
-- **Uso diario**: kit `M4L` + `M4Q` + `M4W` (RAW lineal de 12 bits, JPG y revisión correctos) y
-  `./importar` con la SD en el Mac. Guía: [`docs/USO.md`](docs/USO.md).
+- **Uso diario**: kit `sd_kit/m4_diario` (`M4L` + `M4Q` + `M4W` + `EET` + `EETV`: RAW lineal de 12 bits,
+  JPG y revisión correctos) y `./importar` con la SD en el Mac. Guía: [`docs/USO.md`](docs/USO.md).
+- **Prueba de estrés (2026-11-13)**: 16 RAW intactos; disparar antes de que termine el procesado de la
+  foto anterior daña el JPG de esa foto (3 de 3 casos) y puede colgar la cámara. Regla: 15 s entre
+  disparos. Variante por probar con espera forzada: `sd_kit/m4_diario_s` (añade `M4S`, una sola ranura
+  de RAW; sólo RAM).
 - **Conversor RAW → DNG** (`tools/m531raw.py`): formato por tamaño, curva de descompresión del firmware,
   patrón GBRG, matriz ajustada; balance desde el JPG (modo 0) o por foto desde el propio RAW (lo claro y
   menos cálido de la escena, con reserva a las ganancias de la cámara); DNG apaisado por omisión, `--rotar`.

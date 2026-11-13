@@ -1634,3 +1634,152 @@ sombra y algo blanco, ISO fijo si el menú lo permite, sin flash):
 3. Opcional: ocho tomas iguales con cada kit, para apilar.
 Mide: la codificación real de P8 contra la simulada (misma escena y exposición), el ruido de lectura en
 negro verdadero y si la toma a −2 EV subida +2 EV iguala a la normal en los dos modos.
+
+## 2026-11-13 — Prueba de estrés del kit diario: disparar encima de la foto anterior; script M4S
+
+Datos: `dump/2026-11-13` (16 RAW `101O2022–2037`, 15 JPG), `dump/estres_2026-11-13` (los `.LOG`, y
+`listado_sd.txt` con las horas de la SD). Análisis estático sobre `work/code_full.s`, Ghidra y
+`dump/ram_snapshot.bin`. Informe del usuario: lo único que falló fue disparar antes de que la foto
+anterior terminara de guardarse.
+
+**Línea de tiempo** (reloj de la cámara, sólo valen las diferencias; FAT guarda la hora cada 2 s y el
+EXIF cada 1 s). Disparo = `DateTimeOriginal` del JPG; RAW y JPG = hora de cierre del archivo.
+
+| Foto | Disparo | RAW | JPG | Disparo→JPG | Siguiente disparo tras el JPG | JPG |
+|---|---|---|---|---|---|---|
+| 2022 | 23:29:57 | 30:02 | 30:08 | 11 s | +8 s | bien |
+| 2023 | 30:16 | 30:20 | 30:24 | 8 s | +94 s | bien |
+| 2024 | 31:58 | 32:02 | 32:06 | 8 s | +18 s | bien |
+| 2025 | 32:24 | 32:28 | 32:36 | 12 s | +24 s | bien |
+| 2026 | 33:00 | 33:04 | 33:12 | 12 s | +12 s | bien |
+| 2027 | 33:24 | 33:30 | 33:32 | 8 s | +36 s | bien |
+| 2028 | 34:08 | 34:12 | 34:18 | 10 s | — | bien |
+| 2029 | (≈34:37) | 34:42 | **no hay** | — | — | sin JPG |
+| 2030 | 34:57 | 35:02 | 35:06 | 9 s | +6 s | bien |
+| 2031 | 35:12 | 35:16 | 35:20 | 8 s | (arranque) | bien |
+| — | arranque en frío: `M4L.LOG` 35:30, `M4Q` 35:32, `M4W` y `EET` 35:34, `EETV` y `BatchScripts.log` 35:38 | | | | | |
+| 2032 | 35:35 | 35:40 | 35:48 | 13 s | **−1 s** | **franjas** |
+| 2033 | 35:47 | 35:54 | 35:58 | 11 s | +3 s | bien |
+| 2034 | 36:01 | 36:06 | 36:16 | 15 s | **−7 s** | **bloque negro** |
+| 2035 | 36:09 | 36:14 | 36:28 | 19 s | **−7 s** | **franjas** |
+| 2036 | 36:21 | 36:28 | 36:32 | 11 s | +3 s | bien |
+| 2037 | 36:35 | 36:40 | 36:46 | 11 s | — | bien |
+
+- Sin solape: RAW cerrado 4–7 s después del disparo; JPG 8–12 s después. Con un disparo encima el JPG
+  de la foto en curso tarda 13–19 s.
+- Los tres JPG cuyo procesado se cruzó con el disparo siguiente están dañados (3 de 3); los doce que
+  terminaron antes del disparo siguiente están bien (12 de 12). Intervalos entre disparos: dañados con
+  8 y 12 s; correctos desde 14 s.
+- Arranque en frío a mitad de sesión: los `.LOG` se reescribieron a las 35:30–35:38 y las guardias de
+  M4L leyeron los valores de fábrica (`8`, `30757`), así que el código se recargó de la NAND. La foto
+  2032 se disparó a las 35:35, con EET y EETV todavía corriendo (M4L, M4Q y M4W ya habían terminado):
+  salió con sus 12 bits. Los archivos no dicen si el arranque fue un apagado del usuario o un cuelgue.
+- 2029: RAW completo y sin JPG; el disparo siguiente llegó 15 s después del cierre del RAW. Es la firma
+  de un procesado interrumpido (cuelgue o apagado) entre el guardado del RAW y el del JPG.
+
+**Los 16 RAW están intactos.** 21.150.720 B cada uno; SHA-256 de la copia igual al de la SD (31
+archivos); ninguna fila en cero ni constante; correlación fila a fila sin saltos (también en las filas
+2176 y 2801, donde empezaría la ranura 1 y donde acabaría la SDRAM); 12 bits lineales (904 a 3968
+códigos distintos según la escena, máximo 3967 o 4095, negro recortado en 0). Las filas 3254–3263
+salen oscuras en los 16: es el borde del sensor. Los 16 DNG de `~/Pictures/m531_dng/2026-11-13` se
+abren (4320×3264). Los RAW 2033, 2035 y 2036, tomados con la foto anterior en proceso, son tan
+correctos como el resto, igual que sus JPG.
+
+**JPG.** Los 15 se decodifican enteros (3216×4288, `FF D9` al final). EXIF según lo esperado: ISO 64–320;
+sin flash y balance automático, ganancias por omisión (400, 256, 456) en 2022, 2031, 2032, 2034, 2035 y
+2037 (395, 256, 456 en 2036); con flash, calculadas (454–483, 256, 371–400) en 2023, 2027, 2028, 2030 y
+2033; preset Tungsteno (248, 263, 828) en 2024 y 2025; Luz día (451, 256, 417) en 2026. Daño, en filas
+del JPG puesto en apaisado:
+- 2032: cuatro franjas de ruido de 72 filas (2195, 2296, 2395, 2499; paso ≈ 101) y dos bandas negras de
+  20 filas detrás de la tercera y la cuarta.
+- 2035: las mismas cuatro franjas (2202, 2304, 2408, 2511) y otras más finas en 2735–2770 y 2896–2972.
+- 2034: un rectángulo negro de 179 filas (2427–2605) en la mitad izquierda.
+Entre franja y franja la imagen es la propia, y por debajo de la última también. El daño empieza
+siempre pasada la fila 2176 del RAW (2176 · 6480 B = 14.100.480 B = el tamaño de una ranura).
+
+**Los `.LOG` coinciden con lo esperado**: `M4L` 8, 30757, 3, 28712, 4; `M4Q` 4, 49220, 28682, 51012,
+55300; `M4W` 28712, 55300, 56, 48; `EET` 4472856; `EETV` once veces 4472856; `BatchScripts.log` con
+40.192 B de montículo.
+
+**Leído en el código**
+- *Dos ranuras.* `0x12aba4` reparte el pool 8 (`0x213e000`, `0x1ae5000` B) en
+  (tamaño − `[S+0x10]` − `[S+0x14]`) / ceil1024(ancho·alto) ranuras, con `S = 0x3dbdcc`: dos de
+  14.100.480 B, en `0x213e000` y `0x2eb0800`. `S+0x10` y `S+0x14` son reservas de cabeza y de cola, en
+  0 desde el arranque (`0x12ab20`, llamada una vez desde `0xf0758` ← `0x1fdb04`); sólo las cambian
+  `0x12b100` y `0x12b140`, llamadas sólo desde `0x13d9c6–0x13e02e` (junto al código de los modos
+  `0x38`/`0x39`).
+- *Colas.* `[S]` es la cola de ranuras libres y `[S+4]` la de pendientes. El disparo saca una ranura
+  (`0x12b3c4` → `0x12af1c`), la pasa a pendientes al terminar la captura (`0x12b6c8`) y el procesado la
+  devuelve con `0x12bc04`, que activa el evento `0x10` y desarma el reparto si no queda nada en uso.
+  `0x12bc04` corre en el gancho que llama la etapa de procesado (`0x129ba0` → `0xf0d14`/`0xf0e7c`), el
+  mismo que usa el búfer del RAW como área de trabajo: por diseño, cuando la ranura se devuelve el IRP
+  ya no lee el RAW.
+- *"Memoria llena" es un estado de fábrica.* `0xf0944` (`0x12adc4`) devuelve 1 cuando la cola de libres
+  está vacía y `0xf0950` cuenta las libres. Más de veinte llamadas lo consultan, casi todas de la interfaz: el manejador del
+  disparador sale sin preparar nada si está llena (`0x1de48c`, y `0x1de5ee–0x1de616` compara las
+  ranuras libres con las que necesita y espera si hay trabajos pendientes), las pantallas de captura
+  devuelven el estado `0x10000e` (`0x1e26c0`, `0x1e8a22`, `0x1fc8c2`, `0x204a00`, `0x208130`, `0x245b38`)
+  y varios puntos esperan en bucle a que se vacíe (`0x13e296`, `0x1e81d8`, `0x1e8318`, `0x1e4fe0`).
+  Con dos ranuras ese estado sólo aparece tras dos fotos seguidas.
+- *El disparo simple no espera.* `0x1e4a3a` llama a la captura sin consultar la cola de trabajos; la
+  única espera sobre el evento `0x10` (`0x6e1ba`) está en la rama de ráfaga. Con una ranura libre, la
+  interfaz atiende el disparador mientras la foto anterior se procesa: es el diseño de fábrica, que con
+  RAW de 14,1 MB funciona.
+- *Por qué falla en modo 4.* El RAW de 21.150.720 B puesto en la ranura 0 ocupa también 7.050.240 B de
+  la ranura 1 (filas 2176 a 3263). Para el firmware la ranura 1 está libre: la interfaz vuelve a
+  atender el disparador, y lo que prepara el disparo siguiente escribe en esa zona mientras el IRP de
+  la foto en curso todavía la lee. Las franjas son búferes ajenos leídos como RAW de 12 bits (72 filas
+  ≈ 460.800 B, el tamaño de un cuadro de 640×480 en YUV 4:2:0, repetido cuatro veces). Si además el
+  disparo siguiente se captura antes de que el anterior devuelva su ranura, recibe la ranura 1
+  (`0x2eb0800`): su RAW acabaría en `0x42dc400`, pasado el final del pool (`0x3c23000`) y de la SDRAM
+  (`0x4000000`, que se repite cada 64 MB según la lectura por USB): escribiría sobre los pools de
+  arriba y sobre el principio de la RAM.
+
+**Qué resultado coincide con la evidencia**
+- Las tres fotos con solape (2032, 2034, 2035): JPG dañado en la zona de la ranura 1 y foto siguiente
+  intacta. Coincide con la preparación del disparo siguiente escribiendo en la cola del RAW, y con la
+  captura siguiente hecha ya en la ranura 0 (la anterior había devuelto la suya): un RAW de 21 MB en la
+  ranura 1 no habría dejado la cámara funcionando.
+- 2029 (RAW sin JPG y cámara disparando 15 s después): coincide con una captura en la ranura 1 o con un
+  apagado; los archivos no lo distinguen. **Inferido, sin prueba.**
+- La interfaz no bloquea el disparador en este caso; el daño es al JPG de la foto en curso y, en el peor
+  caso, un cuelgue. Ningún RAW se dañó.
+
+**Sin determinar**
+- Qué búferes son los de las franjas (qué pool, quién los escribe) y por qué 2034 tiene un bloque negro
+  de medio ancho en vez de franjas.
+- La causa del arranque de las 35:30 y de la falta del JPG de 2029.
+
+**Regla práctica** (en `docs/USO.md`): 15 s entre disparo y disparo, sin tocar el disparador hasta que
+la vista en vivo vuelva sola; tras encender, esperar a que termine "Run…"; sin ráfaga ni panorama.
+
+**M4S** (`sd_kit/m4_diario_s/Batch/M4S.srt`; kit variante = kit diario + M4S después de M4W). **Sin
+probar en la cámara; el kit diario no cambia.** Una escritura de datos: `[0x3dbde0]` (`S+0x14`, reserva
+de cola) de 0 a 7.050.240 (= `0x1ae5000` − 21.150.720). El reparto pasa de dos ranuras a una, en la
+misma dirección de siempre (`0x213e000`), y la ranura que queda es el RAW del modo 4 entero. Guardias:
+modo de captura 4, `[S+8]` = `0x213e000` y `[S+0xc]` = `0x3c23000` (la estructura ya se inició y el pool
+es el del volcado), cabeza y cola en 0; relectura y registro. `M4S.LOG` esperado: `4`, `34856960`,
+`63057920`, `0`, `0`, `7050240`.
+- *Demostrado por código.* La palabra es un dato que sólo lee el reparto (`0x12ac04`) y las dos
+  funciones de reserva; nadie la vuelve a poner en 0 después del arranque. El reparto se rehace en cada
+  disparo aislado, así que vale desde la primera foto. Con una ranura, la cola de libres queda vacía
+  desde el disparo hasta `0x12bc04`: es el estado "memoria llena" de fábrica, en el que el manejador
+  del disparador no prepara nada y las pantallas esperan. Ese estado dura justo hasta que el IRP deja
+  de leer el RAW. No hay código parcheado ni caché que desalojar.
+- *Inferido, sin prueba en la cámara.* Que en ese estado tampoco se escriba en la zona de la ranura 1
+  (el diseño de fábrica lo exige: ahí estaría la segunda foto esperando turno); cómo se ve en pantalla
+  la espera; y que la devolución de la ranura llegue siempre (si no llega, la cámara se queda en la
+  revisión: batería fuera, nada queda escrito).
+- *Primera vez en la cámara:* `IF v == 0`. El evaluador clasifica el símbolo por sus caracteres
+  (`0x199770`: todos dígitos → entero), igual que `4` u `8`; el valor no interviene.
+- *Lo que cambia para quien dispara:* con M4S un segundo disparo durante el procesado no debería
+  ocurrir; la ráfaga y el panorama siguen fuera (la ráfaga usa otra rama, `0x12bce4`, cuando la cola
+  está vacía).
+
+**Prueba E2E.** `tools/e2e_scripts.py`, 60 casos. Nuevos: el reparto contra el firmware de fábrica y la
+RAM volcada (instrucciones de `0x12aba4`, llamadas únicas, pool 8 de la tabla de pools, cuenta 2 → 1);
+M4S ejecutado entero en siete estados con dos controles (valor cambiado, guardia de modo cambiada); y
+los kits `m4_diario` y `m4_diario_s` como van a la SD.
+
+**Siguiente prueba en la cámara**: `sd_kit/PASOS.md`, paso 11 (kit `m4_diario_s`: tres fotos con espera,
+y una tanda apretando el disparador durante el procesado).

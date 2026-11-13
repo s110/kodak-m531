@@ -1,0 +1,20 @@
+10 REM M4W EXPERIMENTAL: revision en modo 4 lineal sin la tabla de linealizacion del RAW de 8 bits (color de la revision); va DESPUES de M4L y M4Q: solo RAM
+20 FOREIGN m = Run_SpecifyFunc(472806, 1, 0, 1189760, 0, 0, 0, 0, 0)
+30 LOG_PRINT VERIFY m
+40 IF m == 28712 THEN 60
+50 END
+60 FOREIGN a = Run_SpecifyFunc(472806, 1, 0, 1347288, 0, 0, 0, 0, 0)
+70 LOG_PRINT VERIFY a
+80 IF a == 55300 THEN 100
+90 END
+100 FOREIGN b = Run_SpecifyFunc(472806, 1, 0, 1770430, 0, 0, 0, 0, 0)
+110 LOG_PRINT VERIFY b
+120 IF b == 56 THEN 140
+130 END
+140 FOREIGN p = Run_SpecifyFunc(1306778, 2, 0, 1770430, 48, 0, 0, 0, 0)
+150 FOREIGN c = Run_SpecifyFunc(472806, 1, 0, 1770430, 0, 0, 0, 0, 0)
+160 LOG_PRINT VERIFY c
+170 IF c == 48 THEN 190
+180 END
+190 END
+RUN
