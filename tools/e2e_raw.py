@@ -232,6 +232,8 @@ DARKTABLE = '/Applications/darktable.app/Contents/MacOS/darktable-cli'
 CASOS_COLOR = [
     dict(raw='raw20/101O2020.RAW', formato='M4L lineal 12 bits, preset Tungsteno, sin flash',
          blanco=(0.70, 0.82, 0.31, 0.36), color=dict(madera=(0.55, 0.80, 0.62, 0.77))),
+    dict(raw='raw20/101O2021.RAW', formato='M4L lineal 12 bits, preset Luz día con luz de lámpara, sin flash',
+         blanco=(0.62, 0.82, 0.36, 0.42), color=dict(madera=(0.55, 0.80, 0.62, 0.77))),
     dict(raw='raw19/101O2017.RAW', formato='M4L lineal 12 bits, flash, cenital',
          blanco=(0.74, 0.84, 0.50, 0.72), color=dict(fondo_abajo=(0.03, 0.20, 0.80, 0.97))),
     dict(raw='raw20/101O2019.RAW', formato='M4L lineal 12 bits, flash, 27 % quemado',
@@ -243,10 +245,10 @@ CASOS_COLOR = [
     dict(raw='raw12/101O1992.RAW', formato='modo 3, u16',
          color=dict(madera=(0.05, 0.20, 0.60, 0.80), tecla4=(0.60, 0.66, 0.44, 0.50))),
 ]
-# TOL_BLANCO: el peor error medido del balance por foto (parche blanco) es 0,18; en 2020 el mouse recibe
-# además la luz del monitor. TOL_MOTORES y TOL_JPG: cada motor pone su curva de tono y su saturación; con
+# TOL_BLANCO: holgura sobre el peor error medido del balance por foto (0,085 en 20 fotos); en 2020 y 2021 el
+# mouse recibe además la luz del monitor. TOL_MOTORES y TOL_JPG: cada motor pone su curva de tono y su saturación; con
 # la matriz de cámara balanceada que el DNG llevaba antes, la madera se iba a 1,2–1,5 en sips.
-TOL_BLANCO, TOL_MOTORES, TOL_JPG = 0.18, 0.25, 0.25
+TOL_BLANCO, TOL_MOTORES, TOL_JPG = 0.12, 0.25, 0.25
 
 
 def color_motores(reporte):
@@ -255,7 +257,8 @@ def color_motores(reporte):
     Las etiquetas de color del DNG (ColorMatrix, ForwardMatrix, AsShotNeutral, iluminantes, WhiteLevel)
     sólo se prueban revelando el archivo con quien las interpreta según la norma. Con fotos reales de los
     cuatro formatos (dump/, fuera del repo; se omite si faltan) exige, en cada motor:
-      * blanco: el mouse blanco sale neutro (|ln R/G| y |ln B/G| < TOL_BLANCO en sRGB linealizado);
+      * blanco: el mouse blanco sale neutro (|ln R/G| y |ln B/G| < TOL_BLANCO en sRGB linealizado), también
+        con el preset de la cámara equivocado para la luz (2021);
       * color: madera y teclas a menos de TOL_MOTORES (ln de R/G y B/G) del revelado de LibRaw, que es el
         camino que supone el conversor (balance en espacio de cámara y después la matriz);
       * modo 0: además a menos de TOL_JPG del JPG que la cámara sacó del mismo disparo.

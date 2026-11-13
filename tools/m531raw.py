@@ -4,7 +4,8 @@
 uso:
   m531raw.py info ARCHIVO [ARCHIVO2]              detecta formato y lo informa
   m531raw.py dng  ARCHIVO [ARCHIVO2] -o SALIDA.dng [--bits N --packing P --width W
-                  --layout L --cfa RGGB --black N --white N]
+                  --layout L --cfa RGGB --black N --white N --balance B --rotar G]
+  m531raw.py rotar --rotar {no,izq,der,180} ARCHIVO.DNG|JPG ...   cambia sólo la etiqueta de orientación
 
 El firmware guarda el RAW sin cabecera, en uno o dos archivos por disparo: 101O####.raw y
 101b####.raw (cambia el '_' del nombre del JPG por 'O' o 'b'), probablemente los dos campos
@@ -220,28 +221,45 @@ def detectar_cfa(img: np.ndarray):
     return ('RGGB' if o1 < o2 else 'BGGR'), dict(d_verde=d_secundaria, d_otra=d_principal)
 
 
-def neutro_parche_blanco(img, cfa, negro, blanco, pct=98):
-    """Balance por las zonas más claras sin saturar (2 % superior de luminancia). Más estable que el
-    mundo gris en escenas con un color dominante, si hay algo blanco o gris claro en la foto."""
-    v = img.astype(np.float64) - negro
-    pos = {c: [(i // 2, i % 2) for i, ch in enumerate(cfa) if ch == c] for c in 'RGB'}
-    ch = {c: np.mean([v[y::2, x::2] for y, x in pos[c]], axis=0) for c in 'RGB'}
-    R, G, B = ch['R'], ch['G'], ch['B']
-    tope = (blanco - negro) * 0.97
-    ok = (R < tope) & (G < tope) & (B < tope) & (G > 0)
-    L = R + G + B
-    if ok.sum() < 1000:
-        return None
-    sel = ok & (L >= np.percentile(L[ok], pct))
-    n = np.array([R[sel].mean(), G[sel].mean(), B[sel].mean()])
-    return tuple(float(x) for x in np.clip(n / n[1], 0.05, 4.0))
-
-
 def fraccion_quemada(img, negro, blanco):
     """Fracción de celdas 2×2 del mosaico con algún canal saturado (≥ 97 % de la escala)."""
     v = img[: img.shape[0] // 2 * 2, : img.shape[1] // 2 * 2]
     m = np.maximum(np.maximum(v[0::2, 0::2], v[0::2, 1::2]), np.maximum(v[1::2, 0::2], v[1::2, 1::2]))
     return float((m >= negro + (blanco - negro) * 0.97).mean())
+
+
+def neutro_claros_frios(img, cfa, negro, blanco, claros=85, frio=(70, 95)):
+    """Balance por foto: lo claro y menos cálido de la escena.
+
+    El mosaico se promedia en bloques de 8×8 celdas (sin ninguna celda saturada), se toma el 15 % más
+    claro y, de eso, la franja del 70 al 95 % más fría (ln B/R). Lo blanco es, entre lo claro, lo menos
+    cálido: madera, piel y papel viejo tiran a rojo. El 5 % más frío se deja fuera (objetos azules,
+    reflejos del monitor). El parche blanco simple (2 % más claro) mezclaba la madera iluminada con el
+    blanco y dejaba el blanco azulado.
+
+    Medido contra 20 fotos con verdad independiente (mouse blanco en M4L; AWB de la cámara en modo 0 y en
+    los pares de P9; máximo de |ln| en R y B): media 0,050 y peor 0,085, contra 0,063 y 0,101 del parche
+    blanco. La zona 80–90 / 70–80 / 90–98 de los tres parámetros da 0,047–0,054: no es un ajuste fino."""
+    v = img[: img.shape[0] // 16 * 16, : img.shape[1] // 16 * 16].astype(np.float64) - negro
+    pos = {c: [(i // 2, i % 2) for i, ch in enumerate(cfa) if ch == c] for c in 'RGB'}
+    ch = [np.mean([v[y::2, x::2] for y, x in pos[c]], axis=0) for c in 'RGB']
+    tope = (blanco - negro) * 0.97
+    def bloque(a):
+        return a.reshape(a.shape[0] // 8, 8, a.shape[1] // 8, 8).mean((1, 3))
+    quemado = bloque(((ch[0] >= tope) | (ch[1] >= tope) | (ch[2] >= tope)).astype(np.float64))
+    R, G, B = (bloque(c) for c in ch)
+    ok = (quemado == 0) & (R > 0) & (G > 0) & (B > 0)
+    if ok.sum() < 1000:
+        return None
+    R, G, B = R[ok], G[ok], B[ok]
+    L = R + G + B
+    sel = L >= np.percentile(L, claros)
+    R, G, B = R[sel], G[sel], B[sel]
+    t = np.log(B / R)
+    lo, hi = np.percentile(t, frio)
+    sel = (t >= lo) & (t <= hi)
+    n = np.array([R[sel].mean(), G[sel].mean(), B[sel].mean()])
+    return tuple(float(x) for x in np.clip(n / n[1], 0.05, 4.0))
 
 
 def neutro_mundo_gris(img, cfa, negro, blanco):
@@ -260,8 +278,8 @@ def neutro_mundo_gris(img, cfa, negro, blanco):
 
 
 def neutro_creible(neutro):
-    """¿Está el neutro cerca de los balances que la cámara elige de verdad (ver LOCUS_*)? Filtra los
-    resultados del parche blanco cuando lo más claro de la escena tiene color propio."""
+    """¿Está el neutro cerca de los balances que la cámara elige de verdad (ver LOCUS_*)? Filtra el
+    balance por la escena cuando lo claro tiene color propio."""
     if neutro is None or min(neutro) <= 0:
         return False
     x, y = np.log(neutro[0] / neutro[1]), np.log(neutro[2] / neutro[1])
@@ -375,16 +393,80 @@ def neutro_desde_jpg(ruta_raw, img, cfa):
     return tuple(float(x) for x in neutro / neutro[1])
 
 
-def orientacion_jpg(ruta_raw):
-    """Orientación EXIF del JPG hermano (101O1970.RAW → 101_1970.JPG), 1 si no hay."""
+def _jpg_hermano(ruta_raw):
     d, n = os.path.split(ruta_raw)
     for cand in (n[:3] + '_' + n[4:8] + '.JPG', n[:3] + '_' + n[4:8] + '.jpg'):
-        try:
-            from PIL import Image
-            return int(Image.open(os.path.join(d, cand)).getexif().get(0x0112, 1))
-        except Exception:
-            continue
-    return 1
+        if os.path.exists(os.path.join(d, cand)):
+            return os.path.join(d, cand)
+    return None
+
+
+# Giro de la imagen respecto del cuadro del sensor, en cuartos de vuelta a la izquierda, y la etiqueta
+# Orientation (TIFF/EXIF) que lo pide a quien abre el archivo.
+GIROS = {'no': 0, 'izq': 1, '180': 2, 'der': 3}
+_ETIQUETA_GIRO = {0: 1, 1: 8, 2: 3, 3: 6}
+
+
+def giro_jpg(ruta_jpg):
+    """Cuartos de vuelta a la izquierda que la cámara ya aplicó a los píxeles del JPG: 1 si está en
+    vertical (la cámara gira siempre a la izquierda, np.rot90(raw, 1), medido en 20 pares), 0 si no."""
+    try:
+        from PIL import Image
+        w, h = Image.open(ruta_jpg).size
+        return 1 if h > w else 0
+    except Exception:
+        return 0
+
+
+def giro_pedido(rotar, ruta_raw):
+    """--rotar → cuartos de vuelta a la izquierda respecto del sensor. 'camara' copia lo que hizo la
+    cámara con el JPG hermano (0 si no hay JPG)."""
+    if rotar == 'camara':
+        j = _jpg_hermano(ruta_raw)
+        return giro_jpg(j) if j else 0
+    return GIROS[rotar]
+
+
+def poner_orientacion(ruta, valor):
+    """Escribe la etiqueta Orientation (0x0112) de un DNG/TIFF o del EXIF de un JPG, en el sitio: dos
+    bytes, sin recomprimir ni mover nada. Devuelve False si el archivo no trae la etiqueta."""
+    with open(ruta, 'r+b') as f:
+        cab = f.read(4)
+        base = 0
+        if cab[:2] == b'\xff\xd8':                       # JPEG: buscar el segmento APP1 "Exif"
+            p = 2
+            while True:
+                f.seek(p)
+                m = f.read(10)
+                if len(m) < 10 or m[0] != 0xff or m[1] == 0xda:
+                    return False
+                if m[1] == 0xe1 and m[4:] == b'Exif\0\0':
+                    base = p + 10
+                    break
+                p += 2 + struct.unpack('>H', m[2:4])[0]
+            f.seek(base)
+            cab = f.read(4)
+        orden = {b'II': '<', b'MM': '>'}.get(cab[:2])
+        if orden is None:
+            return False
+        ifd = struct.unpack(orden + 'I', f.read(4))[0]
+        f.seek(base + ifd)
+        n = struct.unpack(orden + 'H', f.read(2))[0]
+        for i in range(n):
+            pos = base + ifd + 2 + 12 * i
+            f.seek(pos)
+            if struct.unpack(orden + 'H', f.read(2))[0] == 0x0112:
+                f.seek(pos + 8)
+                f.write(struct.pack(orden + 'H', valor))
+                return True
+    return False
+
+
+def orientar(ruta, giro):
+    """Deja un DNG o un JPG de la cámara mostrándose con `giro` cuartos de vuelta a la izquierda respecto
+    del sensor. En el JPG descuenta el giro que la cámara ya aplicó a los píxeles."""
+    es_jpg = ruta.lower().endswith(('.jpg', '.jpeg'))
+    return poner_orientacion(ruta, _ETIQUETA_GIRO[(giro - (giro_jpg(ruta) if es_jpg else 0)) % 4])
 
 
 def escribir_dng(ruta, img: np.ndarray, cfa: str, negro: int, blanco: int, recorte=None,
@@ -456,7 +538,7 @@ PERFILES = {
     14_100_480: dict(packing='u8', ancho=4320, decodificar=True),  # modo normal: 8 bits comprimidos
     # modo 4: contenedor de 12 bits empaquetado (orden lsb medido), datos de 10 bits lineales con el negro
     # ya restado (máximo 1020 en las fotos 1972–1974). El JPG de este modo sale con el color corrido:
-    # el balance no se toma de él, sino de la propia escena (parche blanco) con reserva a un neutro fijo.
+    # el balance no se toma de él, sino de la propia escena (elegir_balance) con reserva a un neutro fijo.
     21_150_720: dict(bits=12, ancho=4320, blanco=1023, negro=0, balance_jpg=False, neutro='modo4',
                      decodificar10=True),
     17_625_600: dict(bits=10, ancho=4320),  # modo 2: 10 bits empaquetado
@@ -483,10 +565,11 @@ BLANCO_M4_LINEAL = 3950
 # (interior, luz cálida). Provisional.
 NEUTRO_M531 = (0.7056, 1.0, 0.5292)
 # Modo 4, balance de reserva: pares con flash 1976↔1978 y 1977↔1979, tras decodificar con la curva de
-# 10 bits. Se usa si el balance por foto (parche blanco) no da un resultado creíble, o con --balance fijo.
+# 10 bits. Se usa si el balance por foto no da un resultado creíble y la cámara no dejó ganancias propias,
+# o con --balance fijo.
 NEUTRO_M531_MODO4 = (0.62, 1.0, 0.60)
-# Modo 4 lineal: por encima de esta fracción de celdas quemadas el parche blanco deja de ser fiable y se
-# usa el AWB de la cámara, salvo que sea el valor por omisión que deja cuando no llega a calcularlo.
+# Modo 4 lineal: por encima de esta fracción de celdas quemadas el balance por la escena deja de ser fiable
+# y se usa el AWB de la cámara, salvo que sea el valor por omisión que deja cuando no llega a calcularlo.
 QUEMADO_MAX = 0.02
 AWB_OMISION = (400, 256, 456)
 # Lugar de los balances que elige la propia cámara: ganancias R/G/B del AWB guardadas en el MakerNote de
@@ -563,13 +646,112 @@ def analizar(rutas, bits=None, packing=None, ancho=None, layout=None, cfa=None, 
                 cfa_metricas={k: round(v, 5) for k, v in cfa_info.items()},
                 candidatos=cands[:5], decodificado=decodificar, max_crudo=max_crudo,
                 modo4='lineal12' if lineal12 else ('curva10' if perfil_info.get('decodificar10') else None),
+                perfil_camara=bool(perfil),   # tamaño de archivo de la M531: patrón y escala conocidos
                 perfil={k: v for k, v in perfil_info.items() if k in ('blanco', 'negro', 'balance_jpg', 'neutro')})
     return img, info
 
 
+def elegir_balance(ruta, img, info, negro, blanco, balance='auto'):
+    """AsShotNeutral de la foto y de dónde salió (info['balance']).
+
+    Orden, con --balance auto:
+      1. modo 0 con JPG bueno: ajuste RAW ↔ JPG (el balance que la cámara aplicó).
+      2. M4L con más de un 2 % quemado y AWB de la cámara calculado: el de la cámara. Con el blanco
+         saturado, lo claro que queda es un objeto con color (error 0,14–0,16 del estimador contra 0,03–0,10
+         de la cámara en 2018 y 2019).
+      3. lo claro y menos cálido de la escena (neutro_claros_frios), si cae cerca de los balances que la
+         cámara elige.
+      4. las ganancias de la cámara (preset o flash), si no son el valor por omisión.
+      5. neutro fijo (modo 4) o mundo gris (resto).
+    Los presets no pasan por delante de la escena: en 2020, con el preset Tungsteno y luz de lámpara más
+    monitor, las ganancias del preset quedan a 0,15 del mouse blanco y la escena a 0,03. --balance camara
+    las fuerza (sirve cuando la escena no tiene nada claro y neutro)."""
+    pf = info.get('perfil') or {}
+    cfa = info['cfa']
+    awb = awb_camara(ruta)
+    info['awb_camara'] = awb
+    n_awb = (awb[1] / awb[0], 1.0, awb[1] / awb[2]) if awb else None
+    awb_util = bool(awb and tuple(awb) != AWB_OMISION and neutro_creible(n_awb))
+    modo4 = pf.get('neutro') == 'modo4'
+    de_camara = bool(info.get('perfil_camara'))
+    if balance == 'fijo':
+        info['balance'] = 'fijo_modo4' if modo4 else 'fijo_m531'
+        return NEUTRO_M531_MODO4 if modo4 else NEUTRO_M531
+    if balance == 'camara' and awb and neutro_creible(n_awb):
+        info['balance'] = 'awb_camara'
+        return n_awb
+    if info.get('decodificado') and pf.get('balance_jpg', True):
+        neutro = neutro_desde_jpg(ruta, img, cfa)
+        if neutro:
+            info['balance'] = 'jpg'
+            return neutro
+    if not de_camara:
+        info['balance'] = 'mundo_gris'
+        return neutro_mundo_gris(img, cfa, negro, blanco)
+    neutro = neutro_claros_frios(img, cfa, negro, blanco)
+    info['quemado'] = round(fraccion_quemada(img, negro, blanco), 4)
+    if info.get('modo4') == 'lineal12' and info['quemado'] > QUEMADO_MAX and awb_util:
+        info['parche_blanco_descartado'] = None if neutro is None else [round(x, 4) for x in neutro]
+        info['balance'] = 'awb_camara'
+        return n_awb
+    if neutro_creible(neutro):
+        info['balance'] = 'parche_blanco'
+        return neutro
+    info['parche_blanco_descartado'] = None if neutro is None else [round(x, 4) for x in neutro]
+    if awb_util:
+        info['balance'] = 'awb_camara'
+        return n_awb
+    if modo4:
+        info['balance'] = 'fijo_modo4'
+        return NEUTRO_M531_MODO4
+    info['balance'] = 'mundo_gris'
+    return neutro_mundo_gris(img, cfa, negro, blanco)
+
+
+def convertir(archivos, salida=None, bits=None, packing=None, width=None, layout=None, cfa=None, black=None,
+              white=None, matriz='m531', balance='auto', invertir_campos=False, rotar='no'):
+    """Analiza uno o dos archivos RAW y, si hay `salida`, escribe el DNG. Devuelve el diccionario de datos.
+    Lanza SystemExit con el motivo si el archivo no se puede leer."""
+    img, info = analizar(archivos, bits, packing, width, layout, cfa, invertir_campos)
+    # Negro provisional: percentil bajo de la escena. Sobreestima si la escena no tiene negros puros;
+    # el valor real sale del negro óptico de una toma real (o --black).
+    negro = black if black is not None else int(np.percentile(img, 0.05))
+    pf = info.get('perfil') or {}
+    if info.get('decodificado'):
+        negro = black if black is not None else 0   # el firmware ya restó el negro
+        blanco = white if white is not None else 1023
+    elif 'blanco' in pf:
+        negro = black if black is not None else pf.get('negro', 0)
+        blanco = white if white is not None else pf['blanco']
+    elif white is not None:
+        blanco = white
+    elif info['bits'] == 16:
+        # contenedor de 16 bits: el sensor da 12–14; usar los bits realmente ocupados
+        blanco = (1 << max(int(img.max()).bit_length(), 12)) - 1
+    else:
+        blanco = (1 << info['bits']) - 1
+    if not 0 <= negro < blanco:
+        raise SystemExit(f'niveles inválidos: negro {negro}, blanco {blanco}')
+    info['niveles_provisionales'] = black is None or white is None
+    info.update(negro=negro, blanco=blanco)
+    if salida is None:
+        return info
+    neutro = elegir_balance(archivos[0], img, info, negro, blanco, balance)
+    info['neutro'] = [round(x, 4) for x in neutro]
+    info['matriz'] = matriz
+    # Orientación: por omisión la del sensor (apaisado). La cámara gira el JPG según un sensor de
+    # orientación que en las tomas de prueba contesta "vertical" casi siempre (30 de 34 fotos giradas de
+    # más), y deja la etiqueta en 1: el JPG no dice cómo se sostuvo la cámara. --rotar lo decide a mano.
+    info['giro'] = giro_pedido(rotar, archivos[0])
+    info['orientacion'] = _ETIQUETA_GIRO[info['giro']]
+    escribir_dng(salida, img, info['cfa'], negro, blanco, neutro=neutro, orientacion=info['orientacion'],
+                 ccm=CCM_M531 if matriz == 'm531' else None)
+    return info
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('accion', choices=['info', 'dng'])
+    ap.add_argument('accion', choices=['info', 'dng', 'rotar'])
     ap.add_argument('archivos', nargs='+')
     ap.add_argument('-o', '--salida')
     ap.add_argument('--bits', type=int, choices=sorted(set(BITS.values())))
@@ -581,77 +763,27 @@ def main():
     ap.add_argument('--white', type=int)
     ap.add_argument('--matriz', choices=['m531', 'c713'], default='m531',
                     help='m531 = ajustada con cinco fotos reales (tools/ajustar_ccm.py); c713 = la de la C713')
-    ap.add_argument('--balance', choices=['auto', 'fijo'], default='auto',
-                    help='modo 4: auto = por foto (parche blanco, con reserva al fijo); fijo = neutro de flash')
+    ap.add_argument('--balance', choices=['auto', 'camara', 'fijo'], default='auto',
+                    help='auto = por foto (ver elegir_balance); camara = ganancias del JPG (preset o flash); '
+                         'fijo = neutro fijo')
+    ap.add_argument('--rotar', choices=list(GIROS) + ['camara'], default='no',
+                    help='giro del DNG respecto del sensor: no = apaisado (por omisión), izq = vertical como '
+                         'lo gira la cámara, der, 180, camara = igual que el JPG hermano')
     ap.add_argument('--invertir-campos', action='store_true', help='el orden de los campos no se detecta; usar si los colores salen cambiados')
     a = ap.parse_args()
+    if a.accion == 'rotar':
+        if a.rotar == 'camara':
+            sys.exit('rotar: indicar el giro con --rotar no, izq, der o 180')
+        for r in a.archivos:
+            print(r, 'girado' if orientar(r, GIROS[a.rotar]) else 'sin etiqueta de orientación: no se tocó')
+        return
     if len(a.archivos) > 2:
         sys.exit('máximo dos archivos (los dos campos de un disparo)')
-    img, info = analizar(a.archivos, a.bits, a.packing, a.width, a.layout, a.cfa, a.invertir_campos)
-    # Negro provisional: percentil bajo de la escena. Sobreestima si la escena no tiene negros puros;
-    # el valor real sale del negro óptico de una toma real (o --black).
-    negro = a.black if a.black is not None else int(np.percentile(img, 0.05))
-    pf = info.get('perfil') or {}
-    if info.get('decodificado'):
-        negro = a.black if a.black is not None else 0   # el firmware ya restó el negro
-        blanco = a.white if a.white is not None else 1023
-    elif 'blanco' in pf:
-        negro = a.black if a.black is not None else pf.get('negro', 0)
-        blanco = a.white if a.white is not None else pf['blanco']
-    elif a.white is not None:
-        blanco = a.white
-    elif info['bits'] == 16:
-        # contenedor de 16 bits: el sensor da 12–14; usar los bits realmente ocupados
-        blanco = (1 << max(int(img.max()).bit_length(), 12)) - 1
-    else:
-        blanco = (1 << info['bits']) - 1
-    if not 0 <= negro < blanco:
-        sys.exit(f'niveles inválidos: negro {negro}, blanco {blanco}')
-    info['niveles_provisionales'] = a.black is None or a.white is None
-    info.update(negro=negro, blanco=blanco)
-    if a.accion == 'info':
-        print(json.dumps(info, indent=2, ensure_ascii=False))
-        return
-    if not a.salida:
+    if a.accion == 'dng' and not a.salida:
         sys.exit('falta -o SALIDA.dng')
-    usar_jpg = info.get('decodificado') and pf.get('balance_jpg', True)
-    neutro = neutro_desde_jpg(a.archivos[0], img, info['cfa']) if usar_jpg else None
-    if neutro:
-        info['balance'] = 'jpg'
-    elif pf.get('neutro') == 'modo4':
-        # Balance por foto: lo más claro de la escena, aceptado sólo si cae cerca de los balances que la
-        # cámara elige. Error medido contra el AWB de la cámara en 10 fotos (modo 0 y pares de modo 4):
-        # media 8 %, peor 18 %. El JPG rosado y su AWB no sirven de referencia en este modo.
-        neutro = None if a.balance == 'fijo' else neutro_parche_blanco(img, info['cfa'], negro, blanco)
-        # M4L con mucho quemado (flash de cerca): los blancos de la escena están saturados y lo más claro
-        # que queda sin saturar es un objeto con color (la madera), así que el parche blanco se va a cálido
-        # (error 0,21–0,31 en ln contra el mouse blanco en 2018 y 2019). En esas tomas el AWB de la cámara sí
-        # se calculó (deja de ser el valor por omisión) y acierta (0,04–0,08): se usa ése.
-        awb = awb_camara(a.archivos[0])
-        info['quemado'] = round(fraccion_quemada(img, negro, blanco), 4)
-        n_awb = (awb[1] / awb[0], 1.0, awb[1] / awb[2]) if awb else None
-        if (a.balance == 'auto' and info.get('modo4') == 'lineal12' and info['quemado'] > QUEMADO_MAX
-                and awb and tuple(awb) != AWB_OMISION and neutro_creible(n_awb)):
-            info['parche_blanco_descartado'] = None if neutro is None else [round(x, 4) for x in neutro]
-            neutro, info['balance'] = n_awb, 'awb_camara'
-        elif neutro_creible(neutro):
-            info['balance'] = 'parche_blanco'
-        else:
-            info['parche_blanco_descartado'] = None if neutro is None else [round(x, 4) for x in neutro]
-            neutro, info['balance'] = NEUTRO_M531_MODO4, 'fijo_modo4'
-    elif pf.get('balance_jpg') is False:
-        neutro = neutro_parche_blanco(img, info['cfa'], negro, blanco)
-        info['balance'] = 'parche_blanco' if neutro else 'fijo_m531'
-        neutro = neutro or NEUTRO_M531
-    else:
-        neutro, info['balance'] = neutro_mundo_gris(img, info['cfa'], negro, blanco), 'mundo_gris'
-    info['neutro'] = [round(x, 4) for x in neutro]
-    info['awb_camara'] = awb_camara(a.archivos[0])
-    info['matriz'] = a.matriz
-    info['orientacion'] = orientacion_jpg(a.archivos[0])
-    escribir_dng(a.salida, img, info['cfa'], negro, blanco, neutro=neutro, orientacion=info['orientacion'],
-                 ccm=CCM_M531 if a.matriz == 'm531' else None)
-    print(json.dumps(info, ensure_ascii=False))
+    info = convertir(a.archivos, a.salida if a.accion == 'dng' else None, a.bits, a.packing, a.width, a.layout,
+                     a.cfa, a.black, a.white, a.matriz, a.balance, a.invertir_campos, a.rotar)
+    print(json.dumps(info, indent=2 if a.accion == 'info' else None, ensure_ascii=False))
 
 
 if __name__ == '__main__':

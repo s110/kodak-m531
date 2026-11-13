@@ -1519,3 +1519,118 @@ conversor anterior fallan cinco de los seis casos. Reporte y revelados en `work/
 **Archivos.** Regenerados todos los DNG de `dump/raw*/` (carpetas `dng`, `dng_v2` y los sueltos de raw1, raw2,
 raw12, raw13). `convertir_carpeta.py` acepta `--sobrescribir`. Para el usuario: `~/Pictures/m531_dng/raw11` …
 `raw20` (28 DNG con su JPG al lado; raw16 no tiene RAW).
+
+## 2026-11-12 — Flujo de uso: balance por la escena, orientación, `./importar` y guía
+
+**Balance de blancos por foto (`m531raw.py`, `neutro_claros_frios` y `elegir_balance`)**
+- Síntoma: mouse blanco 12–16 % azulado en 2020 y 2021. El parche blanco (2 % más claro) mezclaba la
+  madera iluminada con el blanco: neutro demasiado cálido, blanco azulado.
+- Estimador nuevo: bloques de 8×8 celdas sin saturar, 15 % más claro y, de eso, la franja del 70 al 95 %
+  más fría (ln B/R). Lo blanco es, entre lo claro, lo menos cálido; el 5 % más frío queda fuera.
+- Medido con `tools/medir_balance.py` (23 fotos; verdad = mouse blanco en M4L, AWB de la cámara del par de
+  modo 0 en P9, AWB propio en modo 0; error = máx. |ln| en R y B), fotos sin quemado:
+
+  | grupo | parche blanco 98 % | parche 99,5 % | nuevo |
+  | --- | --- | --- | --- |
+  | M4L (2015, 2016, 2020, 2021) | 0,076 / 0,090 | 0,051 / 0,107 | 0,045 / 0,081 |
+  | P9 (1975–1977, 1981, 1982) | 0,066 / 0,101 | 0,101 / 0,169 | 0,050 / 0,085 |
+  | modo 0 (11 fotos) | 0,058 / 0,099 | 0,069 / 0,162 | 0,051 / 0,081 |
+
+  (media / peor). 2020 y 2021 pasan de 0,090 a 0,032 y 0,036. Los tres parámetros no son un ajuste fino:
+  toda la zona 80–90 / 70–80 / 90–98 da media 0,047–0,054.
+- Revelado: mouse de 2020, B/G 1,12 → 1,04 en `sips` y 1,16 → 1,09 en darktable; 2021 igual (1,04 y 1,08).
+  Queda un 4–9 % de azul: el mouse recibe además la luz del monitor.
+- **Ganancias de la cámara (MakerNote `0x1318`) contra el mouse, en M4L:**
+
+  | foto | qué son | error cámara | error escena |
+  | --- | --- | --- | --- |
+  | 2020 | preset Tungsteno, sin flash | 0,150 | 0,032 |
+  | 2021 | preset Luz día con luz de lámpara | 0,554 | 0,036 |
+  | 2015, 2016 | flash, mouse lejos (luz mixta) | 0,139, 0,212 | 0,081, 0,032 |
+  | 2017 | flash, 6 % quemado | 0,044 | 0,046 |
+  | 2018, 2019 | flash de cerca, 25–29 % quemado | 0,100, 0,033 | 0,158, 0,144 |
+
+  El preset es el iluminante nominal, no la luz real: no pasa por delante de la escena. Las ganancias de
+  flash ganan sólo cuando lo blanco está quemado.
+- Regla (`--balance auto`): JPG en modo 0 → M4L con > 2 % quemado y AWB calculado: cámara → escena, si
+  cae en el lugar de balances de la cámara → ganancias de la cámara si no son las por omisión → fijo
+  (modo 4) o mundo gris. `--balance camara` fuerza las de la cámara. Modo 3 y modo 0 sin JPG usan ahora
+  el estimador de escena en vez del mundo gris (1987 sin JPG: 0,05 contra la 1986 de la misma escena).
+
+**Orientación**
+- Decisión: el DNG sale **apaisado, como el sensor** (`Orientation` = 1). El giro del JPG no dice cómo se
+  sostuvo la cámara (30 de 34 tomas giradas de más) y deja la etiqueta en 1. Con el RAW apaisado el
+  error posible es uno solo y conocido: las tomas verticales salen acostadas.
+- `--rotar no|izq|der|180|camara` en `m531raw.py dng`; `m531raw.py rotar` cambia sólo la etiqueta de un DNG
+  o un JPG ya hecho (dos bytes). `izq` es el giro de la cámara (`Orientation` = 8).
+- El JPG que queda junto al DNG lleva la misma orientación (etiqueta 6 sobre los píxeles girados); la
+  copia verificada de `dump/` no se toca.
+- Medido: darktable 5.6.2 y QuickLook (Finder, Vista Previa) giran según la etiqueta; `sips` no gira los
+  píxeles, pasa la etiqueta al archivo que escribe.
+- Pendiente en la cámara: una toma horizontal **nivelada**. Si sale sin girar, el sensor funciona en uso
+  normal y `--rotar camara` pasa a ser la opción buena.
+
+**`./importar`** (`tools/importar_sd.py`): SD → `dump/<fecha>/` con SHA-256 (lectura única, relectura del
+disco, `SHA256SUMS`) → DNG y JPG en `~/Pictures/m531_dng/<fecha>/`. Salta lo ya importado por contenido
+(cualquier carpeta de `dump/` con `SHA256SUMS`), un nombre repetido con otro contenido va a `<fecha>_2`,
+un RAW ilegible no detiene a los demás, la SD sólo se abre en lectura. Guía: `docs/USO.md`.
+
+**Pruebas E2E.** `tools/e2e_importar.py`: SD de mentira con fotos reales (M4L, modo 0, modo 3 sin JPG, JPG
+de 0 bytes, una ya importada, un RAW truncado, un archivo ilegible, basura de macOS), sin permiso de
+escritura y comparada entera antes y después; tres pasadas, 25 comprobaciones. Destapó que `sips` no
+gira los píxeles. `tools/e2e_raw.py`: caso nuevo 2021 (preset equivocado) y tolerancia del blanco de
+0,18 a 0,12. Regenerados los DNG de `~/Pictures/m531_dng/raw11` … `raw20`.
+
+## 2026-11-12 — ¿Sirven los 12 bits? P8 (8 bits con curva) contra M4L (12 bits lineales), medido
+
+`tools/comparar_bits.py` → `work/bits12/` (`reporte.json` y recortes). Fotos: modo 0 de raw8, raw10 y
+raw17; M4L de raw13, raw18, raw19 y raw20. Unidad: DN12 = cuenta del RAW de 12 bits.
+
+**Veredicto: en esta cámara el RAW de P8 guarda la misma imagen que el de M4L.** El ruido del sensor
+tapa los bits de más en toda la escala.
+
+- **Escala.** 1 cuenta de P8 decodificado = 4 DN12. La curva de ruido lo confirma: a igual señal e ISO,
+  misma varianza en los dos modos (ISO 64: K = 1,14 en M4L y 1,18 en P8; ISO 160: 2,58 y 2,81).
+- **Ruido en negro** (zonas sin luz, normal truncada porque el firmware recorta el negro en 0): 7,3 DN12
+  en ISO 64 y 18,6 en ISO 160. Los 2,9 bits de abajo del RAW de 12 bits (4,2 en ISO 160) son ruido.
+- **Niveles por paso** bajo el tope (P8 / 12 bits): 49 / 2046, 48 / 1023, 49 / 512, 48 / 256, 31 / 128,
+  15 / 64, 8 / 32, 4 / 16, 2 / 8, 1 / 4. P8 tiene 256 códigos y los usa todos.
+- **Escalón de P8 contra el ruido** (ISO 64, el caso más exigente): 40 DN12 con ruido 58 en el paso más
+  alto (0,69 σ, +2,0 % de ruido); 20 con 41 (+1,0 %); 12 con 30 (+0,7 %); 4 DN12 de ahí hacia abajo
+  con ruido 8–22 (0,2–0,5 σ, menos de +1 %). En ISO 160, menos de +0,9 % en todos los pasos.
+- **Tope de luces.** El mismo: P8 llega al código 255 (4092 DN12) y M4L a 4095, con las mesetas de
+  saturación del sensor en 3965–4085. Los 12 bits no dan margen arriba.
+- **Rango útil** (del tope 3950 a SNR = 1): 9,08 EV en M4L y 9,07 en P8 en ISO 64; 7,73 y 7,73 en ISO 160.
+- **Bandas al forzar.** P8 simulado desde la misma foto M4L (÷4, código más cercano, decodificar):
+  error por píxel 1,2–13 DN12, siempre bajo el ruido; tras promediar 16×16 el sesgo es 0,07–1,2 DN12
+  (≤ 0,6 %). Sombras subidas +5 EV hasta gris medio y suavizadas 9×9: diferencia media 0,5 niveles de
+  255, percentil 99 de 3–4. Balance extremo (B ×2,5, R ×0,6): media 0,4, percentil 99 de 1–2. Sin
+  bandas ni posterización en ninguno. Recortes: `sombras_*.png`, `sombras_nr_*.png`, `balance_*.png`,
+  y P8 real contra M4L real en `sombras_reales_p8_m4l.png`.
+- Límite de la simulación: supone que la cámara codifica al código más cercano. Los P8 reales lo
+  respaldan (mismo ruido por tramo que M4L, mismo tope).
+
+**Dónde importan los 12 bits:** en nada visible. Ventajas reales de M4L: datos lineales sin depender de la
+tabla `0x429c4c`, y escalones finos en el paso más alto (ahí P8 añade 2 % de ruido).
+**Costos de M4L:** 21,2 MB por foto contra 14,1; tres parches en RAM; el balance automático del JPG no
+se calcula sin flash (queda en 400/256/456).
+
+**Qué da el RAW (los dos modos por igual), por orden de provecho**
+1. Balance de blancos después de la toma, sin pérdida. Es lo que más rinde: el JPG de M4L sin flash sale
+   con el balance por omisión y el preset queda a 0,15 de un blanco real.
+2. Recuperar luces que el JPG quemó: el JPG llega a blanco con el RAW en 1850–3350 DN12, entre 0,24 y
+   1,1 EV bajo el tope. De lo que el JPG quema, el RAW conserva sin saturar del 25 al 100 % según la toma.
+3. Subir sombras: +2 a +3 EV utilizables en ISO 64. Más allá manda el ruido de lectura y aparece un
+   velo violeta, porque el negro viene recortado en 0 (media de +6 DN12 en lo que debería ser 0).
+4. Reducción de ruido y nitidez propias en vez de las de la cámara. El RAW trae píxeles calientes.
+5. Apilar varias tomas con trípode: el ruido baja con √N y los 8 bits de P8 no lo estorban (el ruido
+   reparte la cuantización). El recorte del negro en 0 es el límite.
+6. Horquillado de exposición: 9 EV por toma en ISO 64 y 7,7 en ISO 160; dos tomas a ±2 EV dan unos 11.
+
+**Prueba en cámara que cerraría lo que los archivos no cierran** (trípode, escena fija con una zona de
+sombra y algo blanco, ISO fijo si el menú lo permite, sin flash):
+1. Kit P8: una toma normal, una a −2 EV y una con el objetivo tapado.
+2. Apagar, kit M4L + M4Q + M4W: las mismas tres.
+3. Opcional: ocho tomas iguales con cada kit, para apilar.
+Mide: la codificación real de P8 contra la simulada (misma escena y exposición), el ruido de lectura en
+negro verdadero y si la toma a −2 EV subida +2 EV iguala a la normal en los dos modos.

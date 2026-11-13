@@ -1,0 +1,4 @@
+#!/bin/sh
+# Importa las fotos de la SD de la M531 (copia verificada + DNG). Ver docs/USO.md.
+aqui="$(cd "$(dirname "$0")" && pwd)"
+exec "$aqui/.venv/bin/python" "$aqui/tools/importar_sd.py" "$@"
