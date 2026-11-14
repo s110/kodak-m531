@@ -4,3 +4,5 @@
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin
+  # no-transform: que Cloudflare no inyecte nada (p. ej. el beacon de Web Analytics de la zona)
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
