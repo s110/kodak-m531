@@ -66,7 +66,7 @@ def avisar(texto):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--vault', default='/Volumes/Datos/PhotoVault')
-    ap.add_argument('--destino', default=os.path.expanduser('~/Pictures/m531_dng'))
+    ap.add_argument('--destino', default='/Volumes/Datos/personal/Fotos/m531_dng')
     ap.add_argument('--estado', default=os.path.expanduser('~/.local/state/m531_dng/vistos.json'))
     ap.add_argument('--base', action='store_true', help='marcar todo lo que hay como visto, sin convertir')
     ap.add_argument('--balance', choices=['auto', 'camara'], default='auto')

@@ -12,7 +12,7 @@ Qué hace, en orden:
   3. Convierte cada RAW a DNG en <destino>/<fecha>/, con su JPG al lado.
   4. Imprime un resumen. Código de salida 1 si algo falló.
 
-Por omisión: copias en dump/ de la repo, destino ~/Pictures/m531_dng, fecha de hoy (el reloj de la
+Por omisión: copias en dump/ de la repo, destino /Volumes/Datos/personal/Fotos/m531_dng, fecha de hoy (el reloj de la
 cámara no es fiable). La SD sólo se lee: todos sus archivos se abren en modo lectura y el programa se
 niega a copiar dentro de ella.
 
@@ -36,6 +36,7 @@ sys.path.insert(0, AQUI)
 import m531raw  # noqa: E402
 
 ORIGEN = '/Volumes/NO NAME/DCIM/101KM531'
+DESTINO = '/Volumes/Datos/personal/Fotos/m531_dng'   # en el NVMe, no en el disco interno
 TROZO = 4 << 20
 RE_FOTO = re.compile(r'(\d{3})([Ob_])(\d{4})\.(RAW|JPG)$', re.I)
 FORMATOS = {28_200_960: 'modo 3, 16 bits', 14_100_480: 'modo 0 (P8), 8 bits con curva', 17_625_600: 'modo 2, 10 bits'}
@@ -120,7 +121,7 @@ def main(argv=None):
     ap.add_argument('--origen', default=ORIGEN, help='carpeta DCIM de la SD (por omisión %(default)s)')
     ap.add_argument('--batch', help='carpeta de los .LOG (por omisión Batch/ en la raíz de la SD)')
     ap.add_argument('--copias', default=os.path.join(RAIZ, 'dump'), help='dónde guardar las copias verificadas')
-    ap.add_argument('--destino', default=os.path.expanduser('~/Pictures/m531_dng'), help='dónde dejar DNG y JPG')
+    ap.add_argument('--destino', default=DESTINO, help='dónde dejar DNG y JPG')
     ap.add_argument('--fecha', default=datetime.date.today().isoformat(), help='nombre de la carpeta del día')
     ap.add_argument('--rotar', choices=list(m531raw.GIROS) + ['camara'], default='no',
                     help='giro de todas las fotos: no = apaisadas como el sensor (por omisión), izq = vertical '

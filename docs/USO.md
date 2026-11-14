@@ -49,7 +49,7 @@ balance automático; con `M4L` sin flash no lo calcula y el JPG sale cálido sal
 ### Automático, con sdvault (no hay que hacer nada)
 
 Al meter la SD, sdvault la respalda en `/Volumes/Datos/PhotoVault`. Cuando termina, el agente
-`me.sebastian.m531-dng` convierte los RAW nuevos de la M531 a DNG en `~/Pictures/m531_dng/<fecha de hoy>/`
+`me.sebastian.m531-dng` convierte los RAW nuevos de la M531 a DNG en `/Volumes/Datos/personal/Fotos/m531_dng/<fecha de hoy>/`
 (con su JPG al lado) y avisa con una notificación «N DNG nuevos». Sin fotos nuevas no hace nada.
 
 - Sólo mira carpetas `DCIM/1xxKM531` del vault; otras cámaras no las toca. El vault sólo se lee.
@@ -66,7 +66,7 @@ navegador:
 - **Importar de la SD**: hace lo mismo que `./importar` (copia verificada + DNG) y muestra cada foto nueva.
   **Expulsar** saca la SD cuando termina.
 - **Arrastrar RAW** (con sus JPG al lado, o una carpeta entera, p. ej. desde el photovault): convierte cada
-  `101O####.RAW` a DNG en `~/Pictures/m531_dng/<fecha de hoy>/`. Si vuelves a soltar una foto, se reconvierte.
+  `101O####.RAW` a DNG en `/Volumes/Datos/personal/Fotos/m531_dng/<fecha de hoy>/`. Si vuelves a soltar una foto, se reconvierte.
 - **Balance**: *Auto* (por foto, desde el RAW) o *Cámara* (preset o flash). **Giro**: *Apaisada* o *Como el JPG*.
   Se recuerdan entre sesiones.
 - En cada foto: ↺ ↻ giran DNG y JPG (sólo cambia la etiqueta, sin recomprimir); el tercer botón la abre en
@@ -86,7 +86,7 @@ cd /Volumes/Datos/proyectos/kodak-m531
 ```
 
 Hace todo: copia los RAW, JPG y `.LOG` nuevos a `dump/<fecha>/`, verifica cada copia con SHA-256,
-convierte cada RAW a DNG en `~/Pictures/m531_dng/<fecha>/` con su JPG al lado y enseña un resumen.
+convierte cada RAW a DNG en `/Volumes/Datos/personal/Fotos/m531_dng/<fecha>/` con su JPG al lado y enseña un resumen.
 Lo que ya estaba importado se salta. La SD sólo se lee. Después, expulsa la SD desde Finder.
 
 Opciones útiles:
@@ -101,13 +101,13 @@ Opciones útiles:
 
 Por omisión todo sale **apaisado, como el sensor**. La cámara gira el JPG según su sensor de orientación
 y en las tomas de prueba lo giró casi siempre, con la cámara horizontal o vertical, así que su giro no
-sirve de guía. El RAW siempre es apaisado; el importador deja el JPG de `~/Pictures` igual que el DNG
+sirve de guía. El RAW siempre es apaisado; el importador deja el JPG de la carpeta de DNG igual que el DNG
 cambiando sólo su etiqueta de orientación (la copia de `dump/` queda intacta).
 
 Girar después, sin reconvertir (cambia dos bytes del archivo):
 
 ```sh
-.venv/bin/python tools/m531raw.py rotar --rotar izq ~/Pictures/m531_dng/<fecha>/101_2031.DNG ~/Pictures/m531_dng/<fecha>/101_2031.JPG
+.venv/bin/python tools/m531raw.py rotar --rotar izq /Volumes/Datos/personal/Fotos/m531_dng/<fecha>/101_2031.DNG /Volumes/Datos/personal/Fotos/m531_dng/<fecha>/101_2031.JPG
 ```
 
 `izq` es el giro que aplica la cámara; `der` el contrario; `180` cabeza abajo; `no` vuelve a apaisado.

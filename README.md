@@ -50,7 +50,7 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
 | `tools/m531raw.py` | RAW de la M531 → DNG |
 | `tools/auto_vault.py` + `tools/instalar_auto.py` | DNG automáticos tras cada respaldo de sdvault (agente launchd `me.sebastian.m531-dng`) |
 | `conversor` (`tools/conversor_ui.py`) | ventana en el navegador: arrastrar RAW → DNG, importar de la SD, girar, comparar con el JPG |
-| `importar` (`tools/importar_sd.py`) | SD → copia verificada con SHA-256 + DNG y JPG en `~/Pictures/m531_dng/<fecha>/` |
+| `importar` (`tools/importar_sd.py`) | SD → copia verificada con SHA-256 + DNG y JPG en `/Volumes/Datos/personal/Fotos/m531_dng/<fecha>/` |
 | `tools/convertir_carpeta.py` | convierte una carpeta ya copiada |
 | `tools/check_scripts.py` | verificador estricto de scripts antes de copiarlos a la SD |
 | `tools/patch2srt.py` | parche de código → script que lo aplica sólo en RAM, con guardia |

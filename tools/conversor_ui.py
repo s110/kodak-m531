@@ -361,7 +361,7 @@ def ya_abierto():
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--destino', default=os.path.expanduser('~/Pictures/m531_dng'))
+    ap.add_argument('--destino', default=importar_sd.DESTINO)
     ap.add_argument('--origen', default=importar_sd.ORIGEN, help='carpeta DCIM de la SD')
     ap.add_argument('--copias', help='dónde guarda ./importar las copias verificadas (por omisión dump/ de la repo)')
     ap.add_argument('--puerto', type=int, default=8531, help='0 = cualquiera libre')
