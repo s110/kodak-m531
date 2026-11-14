@@ -12,6 +12,8 @@ Cómo puede fallar (escrito antes de la prueba):
   7. Dos corridas a la vez (respaldos seguidos) convierten dos veces o dejan .parcial.
   8. Escribe algo dentro del vault.
   9. --quitar deja el agente cargado o el plist en su sitio.
+ 10. El portero en Rust arma la clave distinta que Python: arranca Python en cada respaldo (no ahorra nada)
+     o, peor, no lo arranca cuando sí hay fotos nuevas.
 Artefacto: work/e2e_auto_vault/reporte.json (comprobaciones, registro del agente, árbol de salida con SHA-256).
 uso: .venv/bin/python tools/e2e_auto_vault.py
 """
@@ -87,13 +89,26 @@ def main():
     informe = {}
     try:
         # instalar: marca la base
+        portero = os.path.join(tmp, 'bin', 'm531-portero')
         p = subprocess.run([PY, os.path.join(AQUI, 'instalar_auto.py'), '--label', LABEL, '--sello', sello, '--vault', vault,
-                            '--destino', destino, '--estado', estado, '--log', log, '--sin-aviso'], capture_output=True, text=True)
+                            '--destino', destino, '--estado', estado, '--log', log, '--sin-aviso', '--portero', portero],
+                           capture_output=True, text=True)
+        marca = os.path.join(tmp, 'python_arrancado')
+
+        def portero_arranca():
+            """¿El portero pasaría el control a Python? (en vez de Python, un touch de una marca)"""
+            if os.path.exists(marca):
+                os.remove(marca)
+            subprocess.run([portero, vault, estado, '--', 'touch', marca], check=True)
+            return os.path.exists(marca)
         informe['instalar'] = p.stdout + p.stderr
         chequear(p.returncode == 0, f'instala y carga el agente ({p.stderr.strip()})')
         chequear(subprocess.run(['launchctl', 'print', f'gui/{os.getuid()}/{LABEL}'], capture_output=True).returncode == 0,
                  'launchd lo tiene cargado')
         chequear(json.load(open(estado)) and not os.path.exists(destino), 'la base marca lo viejo como visto y no convierte nada')
+        chequear(not portero_arranca(), 'portero: tras la base no hay nada nuevo (misma clave que Python)')
+        plist = os.path.expanduser(f'~/Library/LaunchAgents/{LABEL}.plist')
+        chequear(open(plist, 'rb').read().count(portero.encode()) == 1, 'launchd corre el portero, no Python')
 
         # un respaldo de sdvault con fotos nuevas + un temporal a medio copiar
         como_sdvault(os.path.join(D13, '101O2036.RAW'), os.path.join(m531, '101O2036.RAW'))
@@ -105,6 +120,7 @@ def main():
         os.makedirs(hoy)
         open(os.path.join(hoy, '101_2029.DNG'), 'wb').write(b'hecho antes por ./importar')
         antes_vault = huella(vault)
+        chequear(portero_arranca(), 'portero: ve las fotos nuevas y pasa a Python')
         n0 = 0
         open(sello, 'w').write('2026-11-14T00:00:00Z\n')     # sdvault cierra una corrida limpia
         lineas = esperar_linea(log, n0, 'DNG nuevos')
@@ -121,6 +137,11 @@ def main():
             with rawpy.imread(os.path.join(hoy, n)) as r:
                 chequear(r.raw_image.shape == (3264, 4320), f'{n}: LibRaw lee el mosaico')
         chequear(lineas and any('1 ya existían' in x for x in lineas), 'el registro cuenta el DNG que ya existía')
+        chequear(not portero_arranca(), 'portero: tras convertir ya no hay nada nuevo')
+        t = time.time()
+        for _ in range(20):
+            portero_arranca()
+        informe['portero_ms_por_corrida_ociosa'] = round((time.time() - t) / 20 * 1000, 2)
 
         # otro respaldo sin nada nuevo: silencio
         n1 = len(open(log).read().splitlines())

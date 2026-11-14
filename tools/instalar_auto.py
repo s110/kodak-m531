@@ -7,17 +7,41 @@ uso:  .venv/bin/python tools/instalar_auto.py            instala y carga me.seba
 Al instalar por primera vez marca como vistos los RAW que ya están en el vault (no reconvierte lo viejo;
 para eso está el conversor: arrastrar la carpeta). El agente corre cuando sdvault toca su sello
 ~/.local/state/sdvault/last-ok, es decir, al final de cada respaldo limpio.
+launchd no corre Python directamente: corre el portero en Rust (tools/portero, ~300 KB, sin dependencias),
+que mira el vault en milisegundos y sólo arranca Python cuando hay RAW nuevos que convertir.
 Las demás opciones existen para la prueba E2E (otro label, vault, sello y destino).
 """
 import argparse
 import os
 import plistlib
+import re
+import shutil
 import subprocess
 import sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(AQUI)
 PY = os.path.join(RAIZ, '.venv', 'bin', 'python')
+PORTERO_SRC = os.path.join(AQUI, 'portero')
+
+
+def instalar_portero(destino):
+    """Compila el portero, lo firma con la identidad de firma del llavero (como sdvault: el permiso de macOS
+    para leer el disco sobrevive a las recompilaciones) y lo copia a `destino`."""
+    p = subprocess.run(['cargo', 'build', '--release', '--quiet'], cwd=PORTERO_SRC, capture_output=True, text=True)
+    if p.returncode:
+        sys.exit(f'no compila el portero: {p.stderr[-800:]}')
+    os.makedirs(os.path.dirname(destino), exist_ok=True)
+    tmp = destino + '.nuevo'
+    shutil.copy2(os.path.join(PORTERO_SRC, 'target', 'release', 'm531-portero'), tmp)
+    ids = subprocess.run(['security', 'find-identity', '-v', '-p', 'codesigning'], capture_output=True, text=True).stdout
+    m = re.search(r'"([^"]+)"', ids)
+    ident = m.group(1) if m else '-'
+    firma = ['codesign', '--force', '--sign', ident, '--identifier', 'me.sebastian.m531-portero']
+    if subprocess.run(firma + ['--timestamp', tmp], capture_output=True).returncode:
+        subprocess.run(firma + ['--timestamp=none', tmp], check=True, capture_output=True)
+    os.replace(tmp, destino)
+    return ident
 
 
 def main(argv=None):
@@ -30,6 +54,7 @@ def main(argv=None):
     ap.add_argument('--estado', default=os.path.expanduser('~/.local/state/m531_dng/vistos.json'))
     ap.add_argument('--log', default=os.path.expanduser('~/Library/Logs/m531_dng.log'))
     ap.add_argument('--sin-aviso', action='store_true')
+    ap.add_argument('--portero', default=os.path.expanduser('~/.local/bin/m531-portero'))
     a = ap.parse_args(argv)
 
     plist = os.path.expanduser(f'~/Library/LaunchAgents/{a.label}.plist')
@@ -50,10 +75,12 @@ def main(argv=None):
             sys.exit(f'no se pudo marcar la base: {p.stderr or p.stdout}')
         print(p.stdout.strip())
     os.makedirs(os.path.dirname(a.log), exist_ok=True)
+    ident = instalar_portero(a.portero)
+    print(f'portero en {a.portero} ({os.path.getsize(a.portero) // 1024} KB), firmado: {ident}')
     with open(plist, 'wb') as f:
         plistlib.dump({
             'Label': a.label,
-            'ProgramArguments': args,
+            'ProgramArguments': [a.portero, a.vault, a.estado, '--'] + args,
             'WatchPaths': [a.sello],                     # sdvault lo toca al cerrar una corrida limpia
             'ThrottleInterval': 10,
             'ProcessType': 'Background',

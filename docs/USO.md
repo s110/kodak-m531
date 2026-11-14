@@ -53,6 +53,9 @@ Al meter la SD, sdvault la respalda en `/Volumes/Datos/PhotoVault`. Cuando termi
 (con su JPG al lado) y avisa con una notificación «N DNG nuevos». Sin fotos nuevas no hace nada.
 
 - Sólo mira carpetas `DCIM/1xxKM531` del vault; otras cámaras no las toca. El vault sólo se lee.
+- No queda nada en memoria: launchd lo despierta cuando sdvault termina. Primero corre un portero en Rust
+  (`~/.local/bin/m531-portero`, 328 KB, ~2 MB de memoria, unos milisegundos) que sólo arranca Python si hay
+  fotos nuevas que convertir.
 - No pisa un DNG que ya exista con ese nombre en la carpeta del día (p. ej. hecho con `./importar`).
 - Registro: `~/Library/Logs/m531_dng.log`. Estado (qué RAW ya vio): `~/.local/state/m531_dng/vistos.json`.
 - Lo que ya estaba en el vault al instalarlo no se convierte; para eso, arrastra la carpeta al conversor.
