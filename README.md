@@ -15,7 +15,7 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
   - `M4L` + `M4Q` + `M4W` (probado): modo 4 con 12 bits lineales, JPG y revisión correctos. Es el kit
     de uso. `M3V` y `M2V` quedan como experimentales; ver `sd_kit/PASOS.md`.
 - **Uso diario**: kit `sd_kit/m4_diario` (`M4L` + `M4Q` + `M4W` + `EET` + `EETV`: RAW lineal de 12 bits,
-  JPG y revisión correctos) y `./importar` con la SD en el Mac. Guía: [`docs/USO.md`](docs/USO.md).
+  JPG y revisión correctos) y `./conversor` (ventana) o `./importar` con la SD en el Mac. Guía: [`docs/USO.md`](docs/USO.md).
 - **Prueba de estrés (2026-11-13)**: 16 RAW intactos; disparar antes de que termine el procesado de la
   foto anterior daña el JPG de esa foto (3 de 3 casos) y puede colgar la cámara. Regla: 15 s entre
   disparos. Variante por probar con espera forzada: `sd_kit/m4_diario_s` (añade `M4S`, una sola ranura
@@ -48,6 +48,7 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
 | Archivo | Qué hace |
 |---|---|
 | `tools/m531raw.py` | RAW de la M531 → DNG |
+| `conversor` (`tools/conversor_ui.py`) | ventana en el navegador: arrastrar RAW → DNG, importar de la SD, girar, comparar con el JPG |
 | `importar` (`tools/importar_sd.py`) | SD → copia verificada con SHA-256 + DNG y JPG en `~/Pictures/m531_dng/<fecha>/` |
 | `tools/convertir_carpeta.py` | convierte una carpeta ya copiada |
 | `tools/check_scripts.py` | verificador estricto de scripts antes de copiarlos a la SD |
@@ -58,6 +59,6 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
 | `tools/ajustar_ccm.py` | ajusta y valida la matriz de color con pares RAW/JPG |
 | `tools/medir_balance.py` | error del balance por foto contra 23 fotos con verdad independiente |
 | `tools/comparar_bits.py` | P8 (8 bits con curva) contra M4L (12 bits): ruido, niveles, rango y recortes |
-| `tools/e2e_raw.py`, `tools/e2e_importar.py`, `tools/e2e_fw.py`, `tools/e2e_nand.py`, `tools/e2e_scripts.py` | pruebas de punta a punta |
+| `tools/e2e_raw.py`, `tools/e2e_importar.py`, `tools/e2e_conversor.py`, `tools/e2e_fw.py`, `tools/e2e_nand.py`, `tools/e2e_scripts.py` | pruebas de punta a punta |
 
 Los volcados, binarios del fabricante, fotos y la RAM de la cámara no están en el repo (`.gitignore`).

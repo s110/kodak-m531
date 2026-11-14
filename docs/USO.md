@@ -46,6 +46,26 @@ balance automático; con `M4L` sin flash no lo calcula y el JPG sale cálido sal
 
 ## 3. Importar
 
+### Con la ventana (lo más rápido)
+
+Abre **Conversor M531** (en `~/Applications`, o `./conversor` desde la repo). Se abre una página en el
+navegador:
+
+- **Importar de la SD**: hace lo mismo que `./importar` (copia verificada + DNG) y muestra cada foto nueva.
+  **Expulsar** saca la SD cuando termina.
+- **Arrastrar RAW** (con sus JPG al lado, o una carpeta entera, p. ej. desde el photovault): convierte cada
+  `101O####.RAW` a DNG en `~/Pictures/m531_dng/<fecha de hoy>/`. Si vuelves a soltar una foto, se reconvierte.
+- **Balance**: *Auto* (por foto, desde el RAW) o *Cámara* (preset o flash). **Giro**: *Apaisada* o *Como el JPG*.
+  Se recuerdan entre sesiones.
+- En cada foto: ↺ ↻ giran DNG y JPG (sólo cambia la etiqueta, sin recomprimir); el tercer botón la abre en
+  Vista Previa; clic en la foto la amplía y la barra espaciadora alterna entre el DNG y el JPG de la cámara.
+- **Abrir carpeta** / **Abrir en darktable**: la carpeta del día.
+
+Sólo escucha en el propio Mac (127.0.0.1) con un token por sesión, nunca escribe en la SD y se cierra sola
+diez minutos después de cerrar la página.
+
+### Desde la terminal
+
 Con la SD en el lector del Mac:
 
 ```sh

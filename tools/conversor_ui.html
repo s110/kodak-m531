@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M531 a DNG</title>
+<style>
+:root {
+  --bg: #f4f2ee; --panel: #ffffff; --line: #e2ded6; --text: #1d1b18; --muted: #6f6a61;
+  --accent: #c7790a; --accent-ink: #ffffff; --ok: #2f7d4f; --err: #b3261e; --well: #ebe8e2;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161513; --panel: #1f1e1b; --line: #33312d; --text: #ece8e1; --muted: #9a948a;
+          --accent: #e59a2a; --accent-ink: #1a1306; --ok: #6cc08f; --err: #ff8a80; --well: #121110;
+          --shadow: 0 1px 2px rgba(0,0,0,.4); }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+         backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.barra { max-width: 1280px; margin: 0 auto; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 12px 20px;
+         align-items: center; }
+h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+h1 b { color: var(--accent); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px;
+        border: 1px solid var(--line); color: var(--muted); font-size: 12.5px; background: var(--panel); }
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.pill.on i { background: var(--ok); }
+.sp { flex: 1; }
+button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+         border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: .45; cursor: default; }
+button.prim { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; border-radius: 0; padding: 5px 10px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--well); color: var(--text); font-weight: 600; }
+.opc { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.opc label { display: inline-flex; align-items: center; gap: 8px; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+#zona { border: 1.5px dashed var(--line); border-radius: 14px; background: var(--panel); text-align: center;
+        padding: 56px 20px; transition: border-color .15s, background .15s; cursor: pointer; }
+#zona.compacta { padding: 16px 20px; }
+#zona.sobre { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+#zona strong { display: block; font-size: 16px; margin-bottom: 4px; }
+#zona.compacta strong { display: inline; font-size: 14px; margin: 0 6px 0 0; }
+#zona span { color: var(--muted); }
+#resumen { display: flex; gap: 14px; align-items: center; margin: 18px 2px 10px; color: var(--muted); font-size: 13px; min-height: 30px; }
+#resumen .sp { flex: 1; }
+#rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.foto { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow);
+        display: flex; flex-direction: column; }
+.marco { position: relative; aspect-ratio: 4 / 3; background: var(--well); display: grid; place-items: center; cursor: zoom-in; }
+.marco img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.estado { position: absolute; inset: auto 8px 8px auto; font-size: 11.5px; padding: 2px 8px; border-radius: 99px;
+          background: rgba(0,0,0,.55); color: #fff; }
+.cargando { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent);
+            animation: g .8s linear infinite; }
+@keyframes g { to { transform: rotate(360deg); } }
+.pie { padding: 9px 10px 10px 12px; display: flex; align-items: center; gap: 8px; }
+.pie .t { flex: 1; min-width: 0; }
+.pie .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+.pie .m { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pie .err { color: var(--err); font-size: 12px; white-space: normal; }
+.ic { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 7px; }
+.ic svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.etq { position: absolute; top: 8px; left: 8px; font-size: 11px; padding: 2px 7px; border-radius: 6px; background: rgba(0,0,0,.55); color: #fff; }
+details { margin-top: 18px; color: var(--muted); font-size: 12.5px; }
+details pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+              white-space: pre-wrap; max-height: 260px; overflow: auto; font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--text); }
+#visor { position: fixed; inset: 0; background: rgba(10,10,10,.92); display: none; place-items: center; z-index: 20; cursor: zoom-out; }
+#visor.on { display: grid; }
+#visor img { max-width: 96vw; max-height: 90vh; }
+#visor div { position: fixed; bottom: 14px; left: 0; right: 0; text-align: center; color: #bbb; font-size: 12.5px; }
+#aviso { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+         padding: 8px 14px; border-radius: 9px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#aviso.on { opacity: 1; }
+@media (max-width: 600px) { .barra, main { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="barra">
+    <h1><b>M531</b> RAW → DNG</h1>
+    <span class="pill" id="sd"><i></i><span>buscando la SD…</span></span>
+    <button class="prim" id="importar" disabled>Importar de la SD</button>
+    <button id="expulsar" disabled>Expulsar</button>
+    <span class="sp"></span>
+    <div class="opc">
+      <label>Balance
+        <span class="seg" data-opc="balance">
+          <button data-v="auto" aria-pressed="true" title="Por foto, desde el propio RAW">Auto</button>
+          <button data-v="camara" aria-pressed="false" title="El que usó la cámara (preset o flash)">Cámara</button>
+        </span>
+      </label>
+      <label>Giro
+        <span class="seg" data-opc="rotar">
+          <button data-v="no" aria-pressed="true" title="Apaisada, como el sensor">Apaisada</button>
+          <button data-v="camara" aria-pressed="false" title="Igual que el JPG de la cámara">Como el JPG</button>
+        </span>
+      </label>
+    </div>
+  </div>
+</header>
+<main>
+  <div id="zona" tabindex="0" role="button">
+    <strong>Suelta aquí los RAW</strong>
+    <span>con sus JPG al lado (mejor balance) o una carpeta entera · o haz clic para elegir</span>
+  </div>
+  <input type="file" id="elegir" multiple accept=".raw,.RAW,.jpg,.JPG" hidden>
+  <div id="resumen">
+    <span id="cuenta"></span><span class="sp"></span>
+    <button id="carpeta">Abrir carpeta</button>
+    <button id="darktable">Abrir en darktable</button>
+  </div>
+  <div id="rejilla"></div>
+  <details id="registro" hidden><summary>Registro de la importación</summary><pre></pre></details>
+</main>
+<div id="visor"><img alt=""><div></div></div>
+<div id="aviso"></div>
+<script>
+const TOKEN = '__TOKEN__';
+const RE = /^(\d{3})([Ob_])(\d{4})\.(RAW|JPG)$/i;
+const opc = { balance: 'auto', rotar: 'no' };
+const $ = s => document.querySelector(s);
+const fichas = new Map();          // clave (número) → {el, datos}
+let pendientes = 0, hechos = 0, fallos = 0;
+
+const ICON = {
+  izq: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>',
+  der: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+  abrir: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+};
+
+async function api(ruta, cuerpo, extra = {}) {
+  const r = await fetch(ruta, { method: cuerpo === undefined ? 'GET' : 'POST',
+    headers: { 'X-Token': TOKEN, ...(cuerpo instanceof Blob ? {} : { 'Content-Type': 'application/json' }), ...extra },
+    body: cuerpo === undefined ? undefined : (cuerpo instanceof Blob ? cuerpo : JSON.stringify(cuerpo)) });
+  const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
+  if (!r.ok && j.ok === undefined) j.ok = false;
+  return j;
+}
+function aviso(t) { const a = $('#aviso'); a.textContent = t; a.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => a.classList.remove('on'), 2600); }
+
+document.querySelectorAll('.seg').forEach(s => s.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  opc[s.dataset.opc] = b.dataset.v;
+  s.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  try { localStorage.setItem('m531_' + s.dataset.opc, b.dataset.v); } catch (_) {}
+}));
+for (const k of ['balance', 'rotar']) {
+  let v = null; try { v = localStorage.getItem('m531_' + k); } catch (_) {}
+  const b = v && document.querySelector(`.seg[data-opc="${k}"] button[data-v="${v}"]`); if (b) b.click();
+}
+
+function contar() {
+  const t = [];
+  if (pendientes) t.push(`convirtiendo ${pendientes}…`);
+  if (hechos) t.push(`${hechos} DNG listos`);
+  if (fallos) t.push(`${fallos} con error`);
+  $('#cuenta').textContent = t.join(' · ');
+  $('#zona').classList.toggle('compacta', fichas.size > 0);
+}
+
+function tarjeta(clave, titulo) {
+  let f = fichas.get(clave);
+  if (f) {                          // la misma foto otra vez: se reconvierte en su tarjeta
+    f.el.querySelector('.marco').innerHTML = '<div class="cargando"></div><span class="estado">en cola</span>';
+    f.el.querySelectorAll('.ic').forEach(b => b.disabled = true);
+    return f;
+  }
+  const el = document.createElement('div');
+  el.className = 'foto';
+  el.innerHTML = `<div class="marco"><div class="cargando"></div><span class="estado">en cola</span></div>
+    <div class="pie"><div class="t"><div class="n"></div><div class="m"></div></div>
+    <button class="ic" data-a="izq" title="Girar a la izquierda" disabled>${ICON.izq}</button>
+    <button class="ic" data-a="der" title="Girar a la derecha" disabled>${ICON.der}</button>
+    <button class="ic" data-a="abrir" title="Abrir en Vista Previa" disabled>${ICON.abrir}</button></div>`;
+  el.querySelector('.n').textContent = titulo;
+  $('#rejilla').prepend(el);
+  f = { el, datos: null };
+  fichas.set(clave, f);
+  el.querySelector('.pie').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b || !f.datos) return;
+    if (b.dataset.a === 'abrir') return api('/api/abrir', { que: 'vista', dng: f.datos.dng });
+    b.disabled = true;
+    const r = await api('/api/girar', { dng: f.datos.dng, sentido: b.dataset.a });
+    b.disabled = false;
+    if (r.ok) mostrar(clave, r); else aviso(r.error);
+  });
+  el.querySelector('.marco').addEventListener('click', () => f.datos && ampliar(f.datos));
+  contar();
+  return f;
+}
+function estado(clave, txt) { const e = fichas.get(clave).el.querySelector('.estado'); if (e) e.textContent = txt; }
+function vistaURL(d, que = 'dng', tam = 900) { return `/api/vista?t=${TOKEN}&que=${que}&tam=${tam}&dng=${encodeURIComponent(d.dng)}&v=${d.v}-${d.giro}`; }
+
+function mostrar(clave, d) {
+  const f = fichas.get(clave); f.datos = Object.assign(f.datos || {}, d);
+  const m = f.el.querySelector('.marco');
+  const img = new Image(); img.alt = d.nombre; img.src = vistaURL(f.datos);
+  img.onerror = () => { m.innerHTML = '<span class="etq">sin vista previa</span>'; };
+  img.onload = () => { m.replaceChildren(img); const e = document.createElement('span'); e.className = 'etq'; e.textContent = 'DNG'; m.append(e); };
+  f.el.querySelector('.n').textContent = d.nombre;
+  const dd = f.datos;
+  f.el.querySelector('.t > div:last-child').className = 'm';
+  const meta = f.el.querySelector('.m');
+  meta.textContent = meta.title = [dd.formato, dd.balance && 'balance ' + dd.balance.replace('_', ' '),
+    dd.jpg ? 'con JPG' : 'sin JPG'].filter(Boolean).join(' · ');
+  f.el.querySelectorAll('.ic').forEach(b => b.disabled = false);
+}
+function fallo(clave, msg) {
+  const f = fichas.get(clave);
+  f.el.querySelector('.marco').innerHTML = '<span class="etq">error</span>';
+  const m = f.el.querySelector('.m'); m.className = 'err'; m.textContent = msg;
+}
+
+const visor = $('#visor');
+let visorDatos = null, visorQue = 'dng';
+function ampliar(d) { visorDatos = d; visorQue = 'dng'; pintarVisor(); visor.classList.add('on'); }
+function pintarVisor() {
+  visor.querySelector('img').src = vistaURL(visorDatos, visorQue, 2400);
+  visor.querySelector('div').textContent = `${visorDatos.nombre} · ${visorQue === 'dng' ? 'DNG (render de macOS)' : 'JPG de la cámara'}` +
+    (visorDatos.jpg ? ' · espacio: cambiar DNG / JPG' : '') + ' · Esc: cerrar';
+}
+visor.addEventListener('click', () => visor.classList.remove('on'));
+document.addEventListener('keydown', e => {
+  if (!visor.classList.contains('on')) return;
+  if (e.key === 'Escape') visor.classList.remove('on');
+  if (e.key === ' ' && visorDatos.jpg) { e.preventDefault(); visorQue = visorQue === 'dng' ? 'jpg' : 'dng'; pintarVisor(); }
+});
+
+// ---- archivos soltados: agrupar por disparo, subir JPG y RAW, convertir (3 a la vez)
+async function leerEntrada(ent, out) {
+  if (ent.isFile) return new Promise(r => ent.file(f => { out.push(f); r(); }, r));
+  if (ent.isDirectory) {
+    const lector = ent.createReader();
+    for (;;) {
+      const lote = await new Promise(r => lector.readEntries(r, () => r([])));
+      if (!lote.length) break;
+      for (const e of lote) await leerEntrada(e, out);
+    }
+  }
+}
+const cola = []; let activos = 0;
+function encolar(t) { cola.push(t); pendientes++; contar(); bombear(); }
+function bombear() {
+  while (activos < 3 && cola.length) {
+    const t = cola.shift(); activos++;
+    t().finally(() => { activos--; pendientes--; contar(); bombear(); });
+  }
+}
+function recibir(archivos) {
+  const grupos = new Map();
+  let ignorados = 0;
+  for (const f of archivos) {
+    const m = f.name.match(RE);
+    if (!m) { if (!f.name.startsWith('.')) ignorados++; continue; }
+    const clave = m[1] + m[3];
+    const g = grupos.get(clave) || { raws: [], jpg: null, titulo: `${m[1]}_${m[3]}` };
+    if (m[4].toUpperCase() === 'JPG') g.jpg = f; else g.raws.push(f);
+    grupos.set(clave, g);
+  }
+  let n = 0;
+  for (const [clave, g] of [...grupos].sort()) {
+    const O = g.raws.find(f => f.name.toUpperCase()[3] === 'O');
+    if (!O) continue;
+    n++;
+    tarjeta(clave, g.titulo); estado(clave, 'en cola');
+    encolar(async () => {
+      estado(clave, 'subiendo');
+      if (g.jpg && g.jpg.size) await api('/api/subir', g.jpg, { 'X-Nombre': encodeURIComponent(g.jpg.name) });
+      for (const f of g.raws) {
+        const r = await api('/api/subir', f, { 'X-Nombre': encodeURIComponent(f.name) });
+        if (!r.ok) { fallos++; return fallo(clave, r.error); }
+      }
+      estado(clave, 'convirtiendo');
+      const r = await api('/api/convertir', { nombre: O.name, ...opc });
+      if (r.ok) { hechos++; mostrar(clave, r); } else { fallos++; fallo(clave, r.error); }
+    });
+  }
+  if (!n) aviso(ignorados ? 'No hay RAW de la M531 (101O####.RAW) entre esos archivos' : 'Nada que convertir');
+}
+const zona = $('#zona');
+zona.addEventListener('click', () => $('#elegir').click());
+zona.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') $('#elegir').click(); });
+$('#elegir').addEventListener('change', e => { recibir([...e.target.files]); e.target.value = ''; });
+document.addEventListener('dragover', e => { e.preventDefault(); zona.classList.add('sobre'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) zona.classList.remove('sobre'); });
+document.addEventListener('drop', async e => {
+  e.preventDefault(); zona.classList.remove('sobre');
+  const ents = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const out = [];
+  if (ents.length) for (const en of ents) await leerEntrada(en, out); else out.push(...e.dataTransfer.files);
+  recibir(out);
+});
+
+// ---- SD
+let sdHay = false, importando = false;
+async function sondear() {
+  const s = await api('/api/estado').catch(() => null);
+  const p = $('#sd');
+  if (!s) { p.className = 'pill'; p.querySelector('span').textContent = 'conversor cerrado: vuelve a abrirlo'; return; }
+  sdHay = s.sd;
+  p.className = 'pill' + (s.sd ? ' on' : '');
+  p.querySelector('span').textContent = s.sd ? `SD conectada · ${s.sd_raw} RAW` : 'sin SD';
+  $('#importar').disabled = !s.sd || importando;
+  $('#expulsar').disabled = !s.sd || importando;
+}
+setInterval(sondear, 4000); sondear();
+
+$('#importar').addEventListener('click', async () => {
+  const r = await api('/api/importar', opc);
+  if (!r.ok) return aviso(r.error);
+  importando = true; $('#importar').disabled = $('#expulsar').disabled = true;
+  $('#importar').textContent = 'Importando…';
+  const reg = $('#registro'); reg.hidden = false; reg.open = true;
+  const tick = async () => {
+    const s = await api('/api/importar');
+    reg.querySelector('pre').textContent = (s.lineas || []).join('\n');
+    if (s.corriendo) return setTimeout(tick, 700);
+    importando = false; $('#importar').textContent = 'Importar de la SD'; sondear();
+    for (const d of s.dngs) { const k = d.dng; tarjeta(k, d.nombre); hechos++; mostrar(k, d); }
+    contar();
+    aviso(s.codigo ? 'Importación con errores: mira el registro' : (s.dngs.length ? `${s.dngs.length} DNG nuevos` : 'Nada nuevo en la SD'));
+    if (!s.codigo) reg.open = false;
+  };
+  tick();
+});
+$('#expulsar').addEventListener('click', async () => {
+  const r = await api('/api/expulsar', {}); aviso(r.ok ? 'SD expulsada: ya puedes sacarla' : r.error); sondear();
+});
+$('#carpeta').addEventListener('click', () => api('/api/abrir', { que: 'finder' }));
+$('#darktable').addEventListener('click', async () => { const r = await api('/api/abrir', { que: 'darktable' }); if (!r.ok) aviso(r.error || 'No se pudo abrir darktable'); });
+</script>
+</body>
+</html>

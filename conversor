@@ -1,0 +1,4 @@
+#!/bin/sh
+# Conversor RAW → DNG de la M531 en el navegador (arrastrar y soltar, importar de la SD). Ver docs/USO.md.
+aqui="$(cd "$(dirname "$0")" && pwd)"
+exec "$aqui/.venv/bin/python" "$aqui/tools/conversor_ui.py" "$@"
