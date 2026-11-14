@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161513" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Reveal: convierte los RAW de tu cámara a DNG en el navegador. Las fotos no salen de tu equipo.">
+<meta name="referrer" content="no-referrer">
+<title>Reveal · RAW a DNG</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/estilo.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header>
+  <div class="barra">
+    <h1><b>Reveal</b> <span>RAW → DNG</span></h1>
+    <span class="pill on" title="La conversión corre en esta página. No se sube nada a ningún servidor."><i></i><span>Tus fotos no salen de este equipo</span></span>
+    <span class="sp"></span>
+    <div class="opc">
+      <label>Balance
+        <span class="seg" data-opc="balance">
+          <button type="button" data-v="auto" aria-pressed="true" title="Por foto, desde el propio RAW">Auto</button>
+          <button type="button" data-v="camara" aria-pressed="false" title="El que usó la cámara (preset o flash)">Cámara</button>
+        </span>
+      </label>
+      <label>Giro
+        <span class="seg" data-opc="rotar">
+          <button type="button" data-v="no" aria-pressed="true" title="Apaisada, como el sensor">Apaisada</button>
+          <button type="button" data-v="camara" aria-pressed="false" title="Igual que el JPG de la cámara">Como el JPG</button>
+        </span>
+      </label>
+    </div>
+  </div>
+</header>
+<main>
+  <div id="zona" tabindex="0" role="button" aria-label="Elegir los RAW para convertir">
+    <strong>Suelta aquí los RAW</strong>
+    <span class="texto">con sus JPG al lado (mejor balance) o la carpeta entera de la tarjeta (DCIM)</span>
+    <span class="botones">
+      <button type="button" class="prim" id="b-archivos">Elegir archivos</button>
+      <button type="button" id="b-carpeta">Elegir carpeta</button>
+    </span>
+  </div>
+  <input type="file" id="elegir" multiple accept=".raw,.RAW,.jpg,.JPG,.jpeg" hidden>
+  <input type="file" id="elegir-carpeta" webkitdirectory hidden>
+  <div id="resumen">
+    <span id="cuenta" role="status" aria-live="polite"></span><span class="sp"></span>
+    <button type="button" id="guardar" hidden title="Guarda los DNG y JPG en una carpeta que elijas">Guardar en carpeta</button>
+    <button type="button" id="zip" class="prim" disabled>Descargar todo (.zip)</button>
+  </div>
+  <div id="rejilla"></div>
+  <p id="camaras" class="nota"></p>
+  <noscript><p class="nota">Esta página necesita JavaScript: la conversión corre en tu navegador.</p></noscript>
+</main>
+<div id="visor" role="dialog" aria-modal="true" aria-label="Foto ampliada"><canvas></canvas><img alt="" hidden><div class="pie-visor"></div></div>
+<div id="aviso" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "Reveal",
+  "short_name": "Reveal",
+  "description": "Convierte los RAW de tu cámara a DNG en el navegador. Las fotos no salen de tu equipo.",
+  "lang": "es",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f2ee",
+  "theme_color": "#c7790a",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

@@ -79,6 +79,27 @@ navegador:
 Sólo escucha en el propio Mac (127.0.0.1) con un token por sesión, nunca escribe en la SD y se cierra sola
 diez minutos después de cerrar la página.
 
+### En la web (cualquier computadora, sin instalar nada)
+
+**Reveal** (`web/` de la repo, una página estática) hace la misma conversión dentro del navegador. Las
+fotos no salen del equipo: no hay servidor, la página no puede conectarse a ningún sitio (lo impide su
+política CSP) y funciona sin red una vez cargada.
+
+- Suelta los RAW con sus JPG, o **Elegir carpeta** con la carpeta `DCIM` de la tarjeta: empareja cada
+  `101O####.RAW` con su `101_####.JPG` (y con `101B####.RAW` si lo hay) e ignora lo demás.
+- Mismas opciones que la ventana: **Balance** *Auto* / *Cámara*, **Giro** *Apaisada* / *Como el JPG*; ↺ ↻ giran
+  DNG y JPG cambiando sólo la etiqueta; clic amplía y la barra espaciadora alterna DNG / JPG.
+- La vista previa del DNG es un revelado rápido de la propia página (media resolución, sin curva de tono):
+  sirve para ver encuadre, balance y giro, no para juzgar el revelado final.
+- Salida: el botón de cada foto baja su DNG (y su JPG); **Descargar todo (.zip)**; en Chrome y Edge,
+  **Guardar en carpeta**. Un lote de más de 1,9 GB (unas 65 fotos) sale repartido en varios `.zip`.
+- El DNG es byte a byte el mismo que hace `tools/m531raw.py` (lo comprueba `tools/e2e_web.py`).
+- Probarla en local: `python3 -m http.server -d web 8000` y abrir `http://localhost:8000`. No hay paso de
+  compilación: lo que se publica es la carpeta `web/` tal cual (`web/_headers` lleva la CSP para Cloudflare Pages).
+
+Está pensada para más cámaras: cada una es un perfil en `web/js/camaras/` (qué archivos son suyos, cómo se
+decodifican, balance y etiquetas del DNG). Hoy sólo existe el de la M531.
+
 ### Desde la terminal
 
 Con la SD en el lector del Mac:
