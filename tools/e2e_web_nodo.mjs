@@ -1,20 +1,20 @@
 #!/usr/bin/env node
-// Lado Node de tools/e2e_web.py: corre los mismos módulos que carga la página (web/js) sobre
-// archivos del disco y deja los resultados para que Python los compare. No es una prueba por sí solo.
+// Lado Node de tools/e2e_web.py: corre el JavaScript que se publica (web/public/js, la salida de
+// `npm run build`) sobre archivos del disco y deja los resultados para que Python los compare. No es
+// una prueba por sí solo.
 // uso: node tools/e2e_web_nodo.mjs TRABAJOS.json   (lista de trabajos; imprime una línea JSON por trabajo)
 import fs from 'node:fs';
 import path from 'node:path';
-import { camara, repartir } from '../web/js/camaras/index.js';
-import { archivosDeFoto, girarFoto } from '../web/js/comun/foto.js';
-import { decodificarJpeg } from '../web/js/comun/jpeg.js';
-import { revelar } from '../web/js/comun/revelado.js';
-import { armarZip, crc32, repartirZips } from '../web/js/comun/zip.js';
+import { camara, repartir } from '../web/public/js/nucleo/camaras/index.js';
+import { archivosDeFoto, girarFoto } from '../web/public/js/nucleo/comun/foto.js';
+import { decodificarJpeg } from '../web/public/js/nucleo/comun/jpeg.js';
+import { armarZip, crc32, repartirZips } from '../web/public/js/nucleo/comun/zip.js';
 
 const leer = r => new Uint8Array(fs.readFileSync(r));
 const unir = partes => Buffer.concat(partes.map(p => Buffer.from(p.buffer, p.byteOffset, p.byteLength)));
 
 function convertir(t) {
-  // t = { carpeta, salida, balance, rotar, giros: ['izq', …], vista: paso | 0 }
+  // t = { carpeta, salida, balance, rotar, giros: ['izq', …] }
   const archivos = fs.readdirSync(t.carpeta).sort().map(name => ({ name, ruta: path.join(t.carpeta, name) }));
   const { disparos, ignorados } = repartir(archivos);
   const res = { ignorados, fotos: [] };
@@ -26,18 +26,11 @@ function convertir(t) {
       const c = perfil.convertir(d.campos.map(f => leer(f.ruta)), d.jpg ? leer(d.jpg.ruta) : null,
         { balance: t.balance, rotar: t.rotar, nombres: d.campos.map(f => f.name) });
       r.ms = Math.round(performance.now() - t0);
-      const foto = { salida: d.salida, cabecera: c.cabecera, pixeles: c.pixeles, jpg: c.jpg, giro: c.giro };
-      for (const s of t.giros || []) girarFoto(foto, s, perfil.orientarJpg);
+      let foto = { salida: d.salida, cabecera: c.cabecera, pixeles: c.pixeles, jpg: c.jpg, giro: c.giro };
+      for (const s of t.giros || []) foto = girarFoto(foto, s, perfil.orientarJpg);
       for (const a of archivosDeFoto(foto)) fs.writeFileSync(path.join(t.salida, a.nombre), unir(a.partes));
       Object.assign(r, { ok: true, info: c.info, formato: c.formato, balance: c.balance, giro: foto.giro, jpg: Boolean(c.jpg),
         neutro: c.revelado.neutro });
-      if (t.vista) {
-        const pix = new Uint16Array(c.pixeles.buffer, c.pixeles.byteOffset, c.pixeles.byteLength / 2);
-        const t1 = performance.now();
-        const v = revelar(pix, c.revelado, { paso: t.vista, giro: foto.giro });
-        r.vista = { ancho: v.ancho, alto: v.alto, ms: Math.round(performance.now() - t1), archivo: `${d.salida}.rgba` };
-        fs.writeFileSync(path.join(t.salida, r.vista.archivo), v.rgba);
-      }
     } catch (e) {
       Object.assign(r, { ok: false, error: e.message, motivo: perfil.esMotivo(e) });
     }

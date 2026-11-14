@@ -10,3 +10,8 @@ tools/arc/
 ref/
 __pycache__/
 .DS_Store
+# web/ (Reveal): dependencias de desarrollo y lo que genera `npm run build`
+node_modules/
+web/public/js/
+web/.tsbuild/
+.wrangler/

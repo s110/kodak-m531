@@ -81,7 +81,7 @@ diez minutos después de cerrar la página.
 
 ### En la web (cualquier computadora, sin instalar nada)
 
-**Reveal** (`web/` de la repo, una página estática) hace la misma conversión dentro del navegador. Las
+**Reveal** (`web/` de la repo, una página estática; lo que se publica es `web/public/`) hace la misma conversión dentro del navegador. Las
 fotos no salen del equipo: no hay servidor, la página no puede conectarse a ningún sitio (lo impide su
 política CSP) y funciona sin red una vez cargada.
 
@@ -93,12 +93,29 @@ política CSP) y funciona sin red una vez cargada.
   sirve para ver encuadre, balance y giro, no para juzgar el revelado final.
 - Salida: el botón de cada foto baja su DNG (y su JPG); **Descargar todo (.zip)**; en Chrome y Edge,
   **Guardar en carpeta**. Un lote de más de 1,9 GB (unas 65 fotos) sale repartido en varios `.zip`.
+- Con un lote a medias: **Balance** y **Giro** valen para lo que se suelte después (lo ya soltado no cambia);
+  soltar otra vez una foto la reconvierte en su misma tarjeta con los ajustes de ese momento; *Descargar todo* y
+  *Guardar en carpeta* se habilitan cuando no queda ninguna foto por convertir y llevan lo que había al hacer
+  clic (mientras tanto, cada foto lista se puede bajar con su botón).
 - El DNG es byte a byte el mismo que hace `tools/m531raw.py` (lo comprueba `tools/e2e_web.py`).
-- Probarla en local: `python3 -m http.server -d web 8000` y abrir `http://localhost:8000`. No hay paso de
-  compilación: lo que se publica es la carpeta `web/` tal cual (`web/_headers` lleva la CSP para Cloudflare Pages).
+- La fuente es TypeScript (`web/src/`) y se compila con `tsc`, sin empaquetador ni dependencias en la página:
 
-Está pensada para más cámaras: cada una es un perfil en `web/js/camaras/` (qué archivos son suyos, cómo se
-decodifican, balance y etiquetas del DNG). Hoy sólo existe el de la M531.
+  ```sh
+  cd web
+  npm install        # una vez: sólo trae TypeScript
+  npm run check      # comprueba los tipos (modo estricto)
+  npm run build      # web/src → web/public/js
+  python3 -m http.server -d public 8000    # y abrir http://localhost:8000
+  ```
+
+  **Lo que se publica es `web/public/`** (HTML, CSS, `_headers` con la CSP para Cloudflare Pages, manifiesto,
+  icono y `js/` compilado): `npx wrangler pages deploy web/public`. `web/public/js/` no está en la repo: hay que
+  compilar antes de publicar. `tools/e2e_web.py` compila y prueba esa misma carpeta.
+
+Está pensada para más cámaras: cada una es un perfil en `web/src/nucleo/camaras/` que cumple la interfaz
+`PerfilCamara` (`perfil.ts`: qué archivos son suyos, cómo se convierten, cómo se gira su JPG) y una línea en
+`index.ts`; el compilador comprueba que encaja. Hoy sólo existe el de la M531. Cómo se comporta la página cuando
+se hacen cosas a mitad de un lote está en [`ESTADOS_WEB.md`](ESTADOS_WEB.md).
 
 ### Desde la terminal
 

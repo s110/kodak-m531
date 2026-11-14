@@ -51,7 +51,7 @@ cambios sólo en RAM, y flasheo sólo con respaldo y vía de recuperación verif
 | `tools/m531raw.py` | RAW de la M531 → DNG |
 | `tools/auto_vault.py` + `tools/instalar_auto.py` + `tools/portero/` | DNG automáticos tras cada respaldo de sdvault (agente launchd `me.sebastian.m531-dng`; un portero en Rust sólo arranca Python si hay RAW nuevos) |
 | `conversor` (`tools/conversor_ui.py`) | ventana en el navegador: arrastrar RAW → DNG, importar de la SD, girar, comparar con el JPG |
-| `web/` (Reveal) | el mismo conversor como página estática: corre entero en el navegador de cualquier computadora, sin servidor ni instalación; perfiles de cámara en `web/js/camaras/` (hoy, la M531) |
+| `web/` (Reveal) | el mismo conversor como página estática: corre entero en el navegador de cualquier computadora, sin servidor ni instalación. Fuente en TypeScript en `web/src/` (perfiles de cámara en `web/src/nucleo/camaras/`; hoy, la M531); `npm run build` deja en `web/public/` la carpeta que se publica. Máquinas de estado de la página: [`docs/ESTADOS_WEB.md`](docs/ESTADOS_WEB.md) |
 | `importar` (`tools/importar_sd.py`) | SD → copia verificada con SHA-256 + DNG y JPG en `/Volumes/Datos/personal/Fotos/m531_dng/<fecha>/` |
 | `tools/convertir_carpeta.py` | convierte una carpeta ya copiada |
 | `tools/check_scripts.py` | verificador estricto de scripts antes de copiarlos a la SD |

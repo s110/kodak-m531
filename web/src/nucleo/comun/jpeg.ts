@@ -16,16 +16,61 @@ const ZIGZAG = new Uint8Array([0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11,
   13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46,
   53, 60, 61, 54, 47, 55, 62, 63]);
 
+interface TablaHuffman {
+  readonly rapida: Uint16Array;
+  readonly maxcod: Int32Array;
+  readonly valptr: Int32Array;
+  readonly mincod: Int32Array;
+  readonly simbolos: Uint8Array;
+}
+/** Componente del SOF: factores de muestreo y tabla de cuantización. */
+interface ComponenteSof { id: number; h: number; v: number; tq: number }
+interface ComponenteBarrido { id: number; td: number; ta: number }
+export interface CabeceraJpeg {
+  ancho: number;
+  alto: number;
+  /** Segmento APP1 sin el prefijo "Exif\0\0". */
+  exif: Uint8Array | null;
+  cuant: Int32Array[];
+  huff: Record<number, TablaHuffman>;
+  dri: number;
+  comps: ComponenteSof[];
+  sof: number;
+  precision?: number;
+  barrido: ComponenteBarrido[];
+  posDatos: number;
+}
+/** Componente listo para decodificar; `plano` es null cuando sólo se valida. */
+interface Componente {
+  readonly h: number;
+  readonly v: number;
+  readonly dc: TablaHuffman;
+  readonly ac: TablaHuffman;
+  readonly q: Int32Array;
+  readonly ancho: number;
+  readonly alto: number;
+  pred: number;
+  readonly plano: Uint8Array | null;
+}
+export interface JpegDecodificado {
+  readonly ancho: number;
+  readonly alto: number;
+  /** alto · ancho · 3 */
+  readonly rgb: Uint8Array;
+}
+
 /**
  * Recorre los segmentos hasta el inicio del barrido, con las mismas exigencias que Image.open de PIL:
  * lanza si falta la firma o si un segmento de la cabecera está cortado. Devuelve tamaño, tablas,
  * EXIF (segmento APP1 sin el prefijo "Exif\0\0") y dónde empiezan los datos comprimidos.
  */
-export function cabeceraJpeg(b) {
+export function cabeceraJpeg(b: Uint8Array | null | undefined): CabeceraJpeg {
   if (!b || b.length < 3 || b[0] !== 0xff || b[1] !== 0xd8 || b[2] !== 0xff) throw new Error('no es un JPEG');
-  const r = { ancho: 0, alto: 0, exif: null, cuant: [], huff: {}, dri: 0, comps: null, sof: 0, barrido: null, posDatos: 0 };
+  // Mientras se lee, falta saber si hay SOF (comps) y SOS (barrido).
+  const r: Omit<CabeceraJpeg, 'comps' | 'barrido'> & { comps: ComponenteSof[] | null; barrido: ComponenteBarrido[] | null } =
+    { ancho: 0, alto: 0, exif: null, cuant: [], huff: {}, dri: 0, comps: null, sof: 0, barrido: null, posDatos: 0 };
   let p = 3, s = 0xff;
-  const leer = () => { if (p >= b.length) throw new Error(TRUNCADO); return b[p++]; };
+  const leer = (): number => { if (p >= b.length) throw new Error(TRUNCADO); return b[p++]; };
   for (;;) {
     if (s !== 0xff) { s = leer(); continue; }
     const m = leer();
@@ -89,10 +134,11 @@ export function cabeceraJpeg(b) {
     }
   }
   if (!r.comps) throw new Error('JPEG sin SOF');
-  return r;
+  // El bucle sólo termina sin lanzar al encontrar el SOS, que es quien pone `barrido`.
+  return r as CabeceraJpeg;
 }
 
-function tablaHuffman(cuentas, simbolos) {
+function tablaHuffman(cuentas: Uint8Array, simbolos: Uint8Array): TablaHuffman {
   // rapida[prefijo de 9 bits] = (largo << 8) | símbolo, o 0 si el código es más largo
   const rapida = new Uint16Array(512);
   const maxcod = new Int32Array(18).fill(-1), valptr = new Int32Array(17), mincod = new Int32Array(17);
@@ -118,7 +164,7 @@ const F_0_298631336 = 2446, F_0_390180644 = 3196, F_0_541196100 = 4433, F_0_7653
   F_2_562915447 = 20995, F_3_072711026 = 25172;
 const _ws = new Int32Array(64);
 
-function idct(coef, q, sal, base, ancho) {
+function idct(coef: Int32Array, q: Int32Array, sal: Uint8Array, base: number, ancho: number): void {
   const ws = _ws;
   for (let c = 0; c < 8; c++) {
     if (coef[c + 8] === 0 && coef[c + 16] === 0 && coef[c + 24] === 0 && coef[c + 32] === 0 && coef[c + 40] === 0 &&
@@ -173,7 +219,7 @@ function idct(coef, q, sal, base, ancho) {
     tmp0 += z1 + z3; tmp1 += z2 + z4; tmp2 += z2 + z3; tmp3 += z1 + z4;
     // Uint8ClampedArray no sirve aquí: libjpeg recorta con una tabla que da la vuelta en 10 bits,
     // pero con coeficientes válidos el valor ya cae en −128…383 y recortar a 0…255 es lo mismo.
-    let v;
+    let v: number;
     v = ((tmp10 + tmp3 + 131072) >> 18) + 128; sal[o] = v < 0 ? 0 : v > 255 ? 255 : v;
     v = ((tmp10 - tmp3 + 131072) >> 18) + 128; sal[o + 7] = v < 0 ? 0 : v > 255 ? 255 : v;
     v = ((tmp11 + tmp2 + 131072) >> 18) + 128; sal[o + 1] = v < 0 ? 0 : v > 255 ? 255 : v;
@@ -190,7 +236,9 @@ function idct(coef, q, sal, base, ancho) {
  * lanza TRUNCADO si se acaban antes de la última fila (lo mismo que hace fallar Image.load de PIL).
  * Devuelve { ancho, alto, rgb } con rgb = Uint8Array de alto·ancho·3.
  */
-export function decodificarJpeg(b, { soloValidar = false } = {}) {
+export function decodificarJpeg(b: Uint8Array, opciones: { soloValidar: true }): { ancho: number; alto: number; rgb: null };
+export function decodificarJpeg(b: Uint8Array, opciones?: { soloValidar?: false }): JpegDecodificado;
+export function decodificarJpeg(b: Uint8Array, { soloValidar = false }: { soloValidar?: boolean } = {}): { ancho: number; alto: number; rgb: Uint8Array | null } {
   const c = cabeceraJpeg(b);
   const nc = c.comps.length;
   if ((c.sof !== 0xc0 && c.sof !== 0xc1) || c.precision !== 8 || (nc !== 1 && nc !== 3) || c.barrido.length !== nc) {
@@ -202,7 +250,7 @@ export function decodificarJpeg(b, { soloValidar = false } = {}) {
   if (nc === 1) { c.comps[0].h = 1; c.comps[0].v = 1; }
   const H = nc === 1 ? 1 : hmax, V = nc === 1 ? 1 : vmax;
   const mcuX = Math.ceil(c.ancho / (8 * H)), mcuY = Math.ceil(c.alto / (8 * V));
-  const comps = c.comps.map((x, i) => {
+  const comps: Componente[] = c.comps.map((x, i) => {
     const s = c.barrido.find(y => y.id === x.id) || c.barrido[i];
     const dc = c.huff[s.td], ac = c.huff[4 + s.ta], q = c.cuant[x.tq];
     if (!dc || !ac || !q) throw new Error(NO_ADMITIDO);
@@ -214,7 +262,7 @@ export function decodificarJpeg(b, { soloValidar = false } = {}) {
   // datos (siguen ceros); si el archivo se acaba sin marcador, pedir un bit más es TRUNCADO.
   let p = c.posDatos, buf = 0, cnt = 0, falsos = 0, marcador = 0;
   const fin = b.length;
-  const llenar = () => {
+  const llenar = (): void => {
     while (cnt <= 24) {
       let x = 0;
       if (marcador) { /* ceros */ } else if (p >= fin) { falsos += 8; } else {
@@ -231,11 +279,11 @@ export function decodificarJpeg(b, { soloValidar = false } = {}) {
       cnt += 8;
     }
   };
-  const gastar = n => {
+  const gastar = (n: number): void => {
     buf <<= n; cnt -= n;
     if (cnt < falsos) throw new Error(TRUNCADO);
   };
-  const simbolo = t => {
+  const simbolo = (t: TablaHuffman): number => {
     if (cnt < 16) llenar();
     const e = t.rapida[buf >>> 23];
     if (e) { gastar(e >> 8); return e & 255; }
@@ -244,14 +292,14 @@ export function decodificarJpeg(b, { soloValidar = false } = {}) {
     gastar(l);
     return t.simbolos[t.valptr[l] + cod - t.mincod[l]];
   };
-  const recibir = s => {
+  const recibir = (s: number): number => {
     if (cnt < s) llenar();
     const v = buf >>> (32 - s);
     gastar(s);
     return v < (1 << (s - 1)) ? v - (1 << s) + 1 : v;
   };
   const coef = new Int32Array(64);
-  const bloque = (co, bx, by) => {
+  const bloque = (co: Componente, bx: number, by: number): void => {
     coef.fill(0);
     const t = simbolo(co.dc);
     if (t) co.pred += recibir(t);
@@ -264,7 +312,7 @@ export function decodificarJpeg(b, { soloValidar = false } = {}) {
       if (k < 64) coef[ZIGZAG[k]] = v;
       k++;
     }
-    if (!soloValidar) idct(coef, co.q, co.plano, by * 8 * co.ancho + bx * 8, co.ancho);
+    if (co.plano) idct(coef, co.q, co.plano, by * 8 * co.ancho + bx * 8, co.ancho);
   };
   const total = mcuX * mcuY;
   let hastaReinicio = c.dri;
@@ -294,13 +342,14 @@ export function decodificarJpeg(b, { soloValidar = false } = {}) {
   return { ancho: c.ancho, alto: c.alto, rgb: aRgb(c, comps, H, V) };
 }
 
-function aRgb(c, comps, H, V) {
+function aRgb(c: CabeceraJpeg, comps: readonly Componente[], H: number, V: number): Uint8Array {
   const W = c.ancho, A = c.alto;
   const rgb = new Uint8Array(W * A * 3);
-  const Y = comps[0];
+  // Sin soloValidar todos los componentes traen su plano.
+  const Y = comps[0], planoY = Y.plano!;
   if (comps.length === 1) {
     for (let y = 0; y < A; y++) for (let x = 0; x < W; x++) {
-      const v = Y.plano[y * Y.ancho + x], o = (y * W + x) * 3;
+      const v = planoY[y * Y.ancho + x], o = (y * W + x) * 3;
       rgb[o] = rgb[o + 1] = rgb[o + 2] = v;
     }
     return rgb;
@@ -317,7 +366,7 @@ function aRgb(c, comps, H, V) {
   const dw = Math.ceil(W / H), dh = Math.ceil(A / V);     // tamaño real del croma
   const filaCb = new Uint8Array(dw * 2 + 2), filaCr = new Uint8Array(dw * 2 + 2);
   // ensanchado "fancy" de jdsample.c para una fila de salida
-  const ensanchar = (pl, anchoPl, fy, v, sal) => {
+  const ensanchar = (pl: Uint8Array, anchoPl: number, fy: number, v: number, sal: Uint8Array): void => {
     if (H === 1) { for (let x = 0; x < dw; x++) sal[x] = pl[fy * anchoPl + x]; return; }
     if (V === 1) {                                         // h2v1: 3/4 del cercano + 1/4 del lejano
       const o = fy * anchoPl;
@@ -336,7 +385,7 @@ function aRgb(c, comps, H, V) {
     const fv = v === 0 ? Math.max(fy - 1, 0) : Math.min(fy + 1, dh - 1);
     const o1 = fv * anchoPl;
     if (dw === 1) { const s = pl[o0] * 3 + pl[o1]; sal[0] = (s * 4 + 8) >> 4; sal[1] = (s * 4 + 7) >> 4; return; }
-    let este = pl[o0] * 3 + pl[o1], sig = pl[o0 + 1] * 3 + pl[o1 + 1], ant;
+    let este = pl[o0] * 3 + pl[o1], sig = pl[o0 + 1] * 3 + pl[o1 + 1], ant: number;
     sal[0] = (este * 4 + 8) >> 4; sal[1] = (este * 3 + sig + 7) >> 4;
     ant = este; este = sig;
     for (let x = 2; x < dw; x++) {
@@ -349,13 +398,13 @@ function aRgb(c, comps, H, V) {
   const Cb = comps[1], Cr = comps[2];
   for (let y = 0; y < A; y++) {
     const fy = (y / V) | 0, v = y % V;
-    ensanchar(Cb.plano, Cb.ancho, fy, v, filaCb);
-    ensanchar(Cr.plano, Cr.ancho, fy, v, filaCr);
+    ensanchar(Cb.plano!, Cb.ancho, fy, v, filaCb);
+    ensanchar(Cr.plano!, Cr.ancho, fy, v, filaCr);
     const oy = y * Y.ancho;
     let o = y * W * 3;
     for (let x = 0; x < W; x++, o += 3) {
-      const l = Y.plano[oy + x], cb = filaCb[x], cr = filaCr[x];
-      let r = l + crR[cr], g = l + ((cbG[cb] + crG[cr]) >> 16), bl = l + cbB[cb];
+      const l = planoY[oy + x], cb = filaCb[x], cr = filaCr[x];
+      const r = l + crR[cr], g = l + ((cbG[cb] + crG[cr]) >> 16), bl = l + cbB[cb];
       rgb[o] = r < 0 ? 0 : r > 255 ? 255 : r;
       rgb[o + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
       rgb[o + 2] = bl < 0 ? 0 : bl > 255 ? 255 : bl;
@@ -365,12 +414,12 @@ function aRgb(c, comps, H, V) {
 }
 
 /** MakerNote (0x927c) del IFD EXIF, como lo da PIL: getexif().get_ifd(0x8769).get(0x927c). */
-export function makerNote(exif) {
+export function makerNote(exif: Uint8Array | null): Uint8Array | null {
   if (!exif || exif.length < 8) return null;
   const le = exif[0] === 0x49 && exif[1] === 0x49;
   if (!le && !(exif[0] === 0x4d && exif[1] === 0x4d)) return null;
   const dv = new DataView(exif.buffer, exif.byteOffset, exif.byteLength);
-  const buscar = (ifd, etiqueta) => {
+  const buscar = (ifd: number, etiqueta: number): { tipo: number; n: number; pos: number } | null => {
     if (ifd + 2 > exif.length) return null;
     const n = dv.getUint16(ifd, le);
     for (let i = 0; i < n; i++) {

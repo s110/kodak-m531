@@ -20,13 +20,26 @@ const TABLA = (() => {
 })();
 
 /** CRC-32 (el de ZIP). Se puede encadenar: crc32(b2, crc32(b1)). */
-export function crc32(bytes, crc = 0) {
+export function crc32(bytes: Uint8Array, crc = 0): number {
   let c = ~crc;
   for (let i = 0; i < bytes.length; i++) c = TABLA[(c ^ bytes[i]) & 255] ^ (c >>> 8);
   return ~c >>> 0;
 }
 
-function tamEntrada(e) {
+/** Lo que el reparto necesita saber de un archivo. */
+export interface EntradaReparto {
+  readonly nombre: string;
+  readonly tam: number;
+  /** Los archivos seguidos con el mismo valor van en el mismo .zip. */
+  readonly junto?: string;
+}
+/** Un archivo listo para escribirse: `datos` va tal cual entre las cabeceras (Uint8Array o Blob). */
+export interface EntradaZip<D> extends EntradaReparto {
+  readonly datos: D;
+  readonly crc: number;
+}
+
+function tamEntrada(e: EntradaReparto): number {
   return 30 + 46 + 2 * new TextEncoder().encode(e.nombre).length + e.tam;
 }
 
@@ -34,16 +47,16 @@ function tamEntrada(e) {
  * Reparte las entradas ({ nombre, tam, … }) en grupos, cada uno para un .zip de hasta `limite` bytes,
  * sin separar las que comparten `junto` (el DNG y su JPG van en el mismo .zip).
  */
-export function repartirZips(entradas, limite = LIMITE_ZIP) {
+export function repartirZips<E extends EntradaReparto>(entradas: readonly E[], limite = LIMITE_ZIP): E[][] {
   limite = Math.min(limite, MAX_32 - 22);
-  const lotes = [];
+  const lotes: E[][] = [];
   for (const e of entradas) {                       // lotes indivisibles, en orden
     if (e.tam > MAX_32 - 200) throw new Error(`${e.nombre}: demasiado grande para un .zip (4 GB)`);
     const u = lotes[lotes.length - 1];
-    if (u && e.junto !== undefined && u[0].junto === e.junto) u.push(e); else lotes.push([e]);
+    if (u && e.junto !== undefined && u[0]!.junto === e.junto) u.push(e); else lotes.push([e]);
   }
-  const grupos = [];
-  let actual = [], tam = 22;
+  const grupos: E[][] = [];
+  let actual: E[] = [], tam = 22;
   for (const lote of lotes) {
     const t = lote.reduce((s, e) => s + tamEntrada(e), 0);
     if (actual.length && (tam + t > limite || actual.length + lote.length > MAX_ENTRADAS)) {
@@ -59,12 +72,12 @@ export function repartirZips(entradas, limite = LIMITE_ZIP) {
  * Partes de un .zip, en orden, para pasárselas a new Blob(partes) (o concatenarlas): cabeceras como
  * Uint8Array y, entre ellas, e.datos tal cual. entradas = [{ nombre, datos, tam, crc }].
  */
-export function armarZip(entradas, fecha = new Date()) {
+export function armarZip<D>(entradas: readonly EntradaZip<D>[], fecha = new Date()): (Uint8Array<ArrayBuffer> | D)[] {
   if (entradas.length > MAX_ENTRADAS) throw new Error('demasiados archivos para un .zip');
   const txt = new TextEncoder();
   const hora = (fecha.getHours() << 11) | (fecha.getMinutes() << 5) | (fecha.getSeconds() >> 1);
   const dia = ((Math.max(fecha.getFullYear(), 1980) - 1980) << 9) | ((fecha.getMonth() + 1) << 5) | fecha.getDate();
-  const partes = [], central = [];
+  const partes: (Uint8Array<ArrayBuffer> | D)[] = [], central: Uint8Array<ArrayBuffer>[] = [];
   let pos = 0;
   for (const e of entradas) {
     const nombre = txt.encode(e.nombre);

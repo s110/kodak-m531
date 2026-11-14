@@ -1,6 +1,7 @@
 // RAW de la Kodak EasyShare M531 → mosaico + datos del DNG. Port fiel de tools/m531raw.py: mismas
 // funciones, mismos nombres y mismo orden de operaciones, para que el DNG salga idéntico al de Python.
 // Sin DOM: corre en Node (tools/e2e_web.py lo compara con Python) y en el Worker de la página.
+// Los nombres con guion bajo son los de Python, a propósito: se leen los dos archivos lado a lado.
 //
 // Dónde puede diferir de numpy y cómo se evita:
 //   * sumas y medias: los datos son enteros (o medios), así que las sumas son exactas en float64 en
@@ -12,18 +13,103 @@
 import { autocorrelacion, correlacion, diag3, inv3, minimosCuadrados3, mul3, mulVec3, percentilHistograma,
   percentilOrdenado, redondear, redondearPar } from '../comun/num.js';
 import { cabeceraJpeg, decodificarJpeg, makerNote } from '../comun/jpeg.js';
+import type { JpegDecodificado } from '../comun/jpeg.js';
 import { ETIQUETA_GIRO, ponerOrientacion } from '../comun/dng.js';
+import type { Matriz3, Numeros, Vec3 } from '../comun/num.js';
+import type { Cfa, Giro } from '../comun/dng.js';
 
-export const FORMATOS = [['u8', 8], ['p10_msb', 10], ['p10_lsb', 10], ['p12_msb', 12], ['p12_lsb', 12],
+export type Packing = 'u8' | 'p10_msb' | 'p10_lsb' | 'p12_msb' | 'p12_lsb' | 'p14_msb' | 'p14_lsb' | 'u16_le' | 'u16_be';
+export type Layout = 'filas' | 'pares' | 'apilado';
+type Color = 'R' | 'G' | 'B';
+/** Mosaico fila a fila. */
+export interface Imagen {
+  readonly d: Uint16Array<ArrayBuffer>;
+  readonly h: number;
+  readonly w: number;
+}
+export interface Candidato {
+  readonly packing: Packing;
+  readonly bits: number;
+  readonly ancho: number;
+  readonly pico: number;
+  readonly vecino: number;
+  readonly puntaje: number;
+  readonly bits_usados: number;
+}
+/** Lo que se sabe de un RAW sólo por su tamaño en bytes (los modos de la cámara). */
+interface PerfilTamano {
+  readonly ancho: number;
+  readonly packing?: Packing;
+  readonly bits?: number;
+  readonly decodificar?: boolean;
+  readonly decodificar10?: boolean;
+  readonly blanco?: number;
+  readonly negro?: number;
+  readonly balance_jpg?: boolean;
+  readonly neutro?: 'modo4';
+}
+type PerfilPublico = Pick<PerfilTamano, 'blanco' | 'negro' | 'balance_jpg' | 'neutro'>;
+export type FuenteBalance = 'fijo_modo4' | 'fijo_m531' | 'awb_camara' | 'jpg' | 'mundo_gris' | 'parche_blanco';
+/** Datos del análisis (el `info` de Python). Lo opcional lo va poniendo `convertir`. */
+export interface Info {
+  archivos: readonly string[] | null;
+  tamanos: number[];
+  packing: Packing;
+  bits: number;
+  ancho: number;
+  alto: number;
+  layout: Layout | 'unico';
+  orden_campos: string;
+  cfa: Cfa;
+  cfa_detectado: Cfa;
+  cfa_rb_provisional: boolean;
+  cfa_metricas: { d_verde: number; d_otra: number };
+  candidatos: Candidato[];
+  decodificado: boolean;
+  max_crudo: number;
+  modo4: 'lineal12' | 'curva10' | null;
+  perfil_camara: boolean;
+  perfil: PerfilPublico;
+  awb_camara?: number[] | null;
+  balance?: FuenteBalance;
+  quemado?: number;
+  parche_blanco_descartado?: number[] | null;
+  niveles_provisionales?: boolean;
+  negro?: number;
+  blanco?: number;
+  neutro?: number[];
+  matriz?: string;
+  giro?: Giro;
+  orientacion?: number;
+}
+/** `Info` cuando `convertir` ya terminó: con niveles, balance y giro. */
+export type InfoConvertida = Info & Required<Pick<Info, 'awb_camara' | 'balance' | 'niveles_provisionales' | 'negro' | 'blanco' | 'neutro' | 'matriz' | 'giro' | 'orientacion'>>;
+export interface OpcionesAnalisis {
+  bits?: number | null;
+  packing?: Packing | null;
+  ancho?: number | null;
+  layout?: Layout | null;
+  cfa?: Cfa | null;
+  invertir?: boolean;
+  nombres?: readonly string[] | null;
+}
+export interface OpcionesConversion extends OpcionesAnalisis {
+  balance?: 'auto' | 'camara' | 'fijo';
+  rotar?: 'no' | 'izq' | '180' | 'der' | 'camara';
+  black?: number | null;
+  white?: number | null;
+}
+
+export const FORMATOS: readonly (readonly [Packing, number])[] = [['u8', 8], ['p10_msb', 10], ['p10_lsb', 10], ['p12_msb', 12], ['p12_lsb', 12],
   ['p14_msb', 14], ['p14_lsb', 14], ['u16_le', 16], ['u16_be', 16]];
-const BITS = Object.fromEntries(FORMATOS);
+const BITS = Object.fromEntries(FORMATOS) as Record<Packing, number>;
 
 /** Error con el motivo para el usuario (el SystemExit de Python). */
 export class Motivo extends Error {}
 
 // ---------------------------------------------------------------- desempaquetado
 /** Uint16Array con los primeros n píxeles (o todos los completos). */
-export function desempaquetar(datos, packing, n = null) {
+export function desempaquetar(datos: Uint8Array, packing: Packing, n: number | null = null): Uint16Array<ArrayBuffer> {
   const b = BITS[packing];
   const total = Math.floor(datos.length * 8 / b);
   n = n === null ? total : Math.min(n, total);
@@ -55,7 +141,7 @@ export function desempaquetar(datos, packing, n = null) {
 }
 
 // ---------------------------------------------------------------- detección
-function _autocorr(x, lagMax) {
+function _autocorr(x: Float64Array, lagMax: number): Float64Array | null {
   // x: Float64Array propio (se modifica). null si es constante.
   const n = x.length;
   let s = 0, igual = true;
@@ -66,14 +152,14 @@ function _autocorr(x, lagMax) {
   return autocorrelacion(x, lagMax);
 }
 
-function _prominencia(ac, l) {
+function _prominencia(ac: Float64Array, l: number): number {
   if (l - 12 < 0 || l + 13 > ac.length) return 0.0;
   const centro = Math.max(ac[l - 1], ac[l], ac[l + 1]);
   const entorno = [...ac.subarray(l - 12, l - 2), ...ac.subarray(l + 3, l + 13)].sort((a, b) => a - b);
   return centro - (entorno[9] + entorno[10]) / 2;
 }
 
-function _ancho_desde_ac(ac, anchoMin, anchoMax) {
+function _ancho_desde_ac(ac: Float64Array, anchoMin: number, anchoMax: number): [number, number] {
   let L = -1, mejor = -Infinity;
   for (let l = anchoMin - anchoMin % 2; l <= Math.min(2 * anchoMax, ac.length - 13); l += 2) {
     if (ac[l] > mejor) { mejor = ac[l]; L = l; }
@@ -87,8 +173,9 @@ function _ancho_desde_ac(ac, anchoMin, anchoMax) {
 
 /** Candidatos de formato, del mejor al peor. `solo` limita los empaquetados a probar (cada candidato
  *  se puntúa por separado, así que probar menos no cambia el puntaje de los que quedan). */
-export function detectar_formato(datos, { anchoMin = 1500, anchoMax = 7000, muestra = 4_000_000, solo = null } = {}) {
-  const res = [];
+export function detectar_formato(datos: Uint8Array, { anchoMin = 1500, anchoMax = 7000, muestra = 4_000_000, solo = null }:
+  { anchoMin?: number; anchoMax?: number; muestra?: number; solo?: ((packing: Packing, bits: number) => boolean) | null } = {}): Candidato[] {
+  const res: Candidato[] = [];
   for (const [packing, b] of FORMATOS) {
     if (solo && !solo(packing, b)) continue;
     const px = desempaquetar(datos, packing, muestra);
@@ -125,32 +212,32 @@ export function detectar_formato(datos, { anchoMin = 1500, anchoMax = 7000, mues
 }
 
 const CONFIANZA_ALTA = 0.15, CONFIANZA_MIN = 0.03, VENTAJA_MIN = 1.5;
-export function confiable(cands) {
+export function confiable(cands: readonly Candidato[]): boolean {
   if (!cands.length) return false;
   const p1 = cands[0].puntaje, p2 = cands.length > 1 ? cands[1].puntaje : 0.0;
   return p1 >= CONFIANZA_ALTA || (p1 >= CONFIANZA_MIN && p1 >= VENTAJA_MIN * Math.max(p2, 1e-9));
 }
 
 /** Imagen = { d: Uint16Array, h, w } (fila a fila). */
-function a_imagen(datos, packing, ancho) {
+function a_imagen(datos: Uint8Array, packing: Packing, ancho: number): Imagen {
   const px = desempaquetar(datos, packing);
   const alto = Math.floor(px.length / ancho);
   return { d: px.subarray(0, alto * ancho), h: alto, w: ancho };
 }
 
-function _suavidad(img) {
+function _suavidad(img: Imagen): number {
   const { d, h, w } = img;
   let s = 0;
   for (let i = 0, n = (h - 2) * w; i < n; i++) s += Math.abs(d[i] - d[i + 2 * w]);
   return s / ((h - 2) * w);
 }
 
-function combinar(campos, layout) {
+function combinar(campos: readonly Imagen[], layout: Layout | null): [Imagen, Layout | 'unico'] {
   if (campos.length === 1) return [campos[0], 'unico'];
   const h = Math.min(campos[0].h, campos[1].h), w = Math.min(campos[0].w, campos[1].w);
-  const fila = (c, y) => c.d.subarray(y * c.w, y * c.w + w);
+  const fila = (c: Imagen, y: number) => c.d.subarray(y * c.w, y * c.w + w);
   const [A, B] = campos;
-  const opciones = {};
+  const opciones: Partial<Record<Layout, Imagen>> = {};
   const f = { d: new Uint16Array(2 * h * w), h: 2 * h, w };
   for (let y = 0; y < h; y++) { f.d.set(fila(A, y), 2 * y * w); f.d.set(fila(B, y), (2 * y + 1) * w); }
   opciones.filas = f;
@@ -162,9 +249,9 @@ function combinar(campos, layout) {
     }
     opciones.pares = p;
   }
-  const ar = [], br = [];
+  const ar: number[] = [], br: number[] = [];
   for (let y = 0; y < h; y += 16) for (let x = 0; x < w; x += 16) { ar.push(A.d[y * A.w + x]); br.push(B.d[y * B.w + x]); }
-  const constante = v => v.every(x => x === v[0]);
+  const constante = (v: number[]) => v.every(x => x === v[0]);
   const parecidos = !constante(ar) && !constante(br) && correlacion(ar, br) > 0.97;
   if (!parecidos || layout === 'apilado') {
     const a = { d: new Uint16Array(2 * h * w), h: 2 * h, w };
@@ -172,18 +259,19 @@ function combinar(campos, layout) {
     opciones.apilado = a;
   }
   if (layout) {
-    if (!(layout in opciones)) throw new Motivo(`disposición ${layout} imposible con campos de ${h} filas`);
-    return [opciones[layout], layout];
+    const pedida = opciones[layout];
+    if (!pedida) throw new Motivo(`disposición ${layout} imposible con campos de ${h} filas`);
+    return [pedida, layout];
   }
-  let mejor = null, min = Infinity;
-  for (const k of Object.keys(opciones)) {
-    const s = _suavidad(opciones[k]);
+  let mejor: Layout = 'filas', min = Infinity;                 // 'filas' está siempre
+  for (const k of Object.keys(opciones) as Layout[]) {
+    const s = _suavidad(opciones[k]!);
     if (s < min) { min = s; mejor = k; }
   }
-  return [opciones[mejor], mejor];
+  return [opciones[mejor]!, mejor];
 }
 
-function detectar_cfa(img) {
+function detectar_cfa(img: Imagen): [Cfa, { d_verde: number; d_otra: number }] {
   const { d, h, w } = img;
   const y0 = (h >> 3) & ~1, x0 = (w >> 3) & ~1;
   const ch = ((h - 2 * y0) >> 1) * 2, cw = ((w - 2 * x0) >> 1) * 2;
@@ -199,7 +287,7 @@ function detectar_cfa(img) {
     }
   }
   const m = suma.map(s => s / n);
-  const parecido = (ma, mb, dif) => Math.abs(ma - mb) / (ma + mb + 1e-9) + (dif / n) / (ma + mb + 1e-9);
+  const parecido = (ma: number, mb: number, dif: number) => Math.abs(ma - mb) / (ma + mb + 1e-9) + (dif / n) / (ma + mb + 1e-9);
   const d_principal = parecido(m[0], m[3], dPrin), d_secundaria = parecido(m[1], m[2], dSec);
   if (d_principal < d_secundaria) {
     return [m[1] < m[2] ? 'GRBG' : 'GBRG', { d_verde: d_principal, d_otra: d_secundaria }];
@@ -208,13 +296,13 @@ function detectar_cfa(img) {
 }
 
 /** Posiciones (y, x) de cada color en la celda de 2×2. */
-function posiciones(cfa) {
-  const pos = { R: [], G: [], B: [] };
-  [...cfa].forEach((c, i) => pos[c].push([i >> 1, i & 1]));
+function posiciones(cfa: Cfa): Record<Color, [number, number][]> {
+  const pos: Record<Color, [number, number][]> = { R: [], G: [], B: [] };
+  [...cfa].forEach((c, i) => pos[c as Color].push([i >> 1, i & 1]));
   return pos;
 }
 
-function fraccion_quemada(img, negro, blanco) {
+function fraccion_quemada(img: Imagen, negro: number, blanco: number): number {
   const { d, w } = img, h2 = img.h >> 1, w2 = w >> 1;
   const tope = negro + (blanco - negro) * 0.97;
   let n = 0;
@@ -229,13 +317,13 @@ function fraccion_quemada(img, negro, blanco) {
 }
 
 /** Balance por foto: lo claro y menos cálido de la escena (ver el original en Python). */
-function neutro_claros_frios(img, cfa, negro, blanco, claros = 85, frio = [70, 95]) {
+function neutro_claros_frios(img: Imagen, cfa: Cfa, negro: number, blanco: number, claros = 85, frio = [70, 95]): Vec3 | null {
   const { d, w } = img;
   const bh = img.h >> 4, bw = w >> 4;               // bloques de 8×8 celdas = 16×16 píxeles
   const pos = posiciones(cfa);
   const [ry, rx] = pos.R[0], [by, bx] = pos.B[0], [g1y, g1x] = pos.G[0], [g2y, g2x] = pos.G[1];
   const tope = (blanco - negro) * 0.97;
-  const R = [], G = [], B = [];
+  const R: number[] = [], G: number[] = [], B: number[] = [];
   for (let j = 0; j < bh; j++) {
     for (let i = 0; i < bw; i++) {
       let sr = 0, sg = 0, sb = 0, quemado = false;
@@ -263,31 +351,31 @@ function neutro_claros_frios(img, cfa, negro, blanco, claros = 85, frio = [70, 9
   let sr = 0, sg = 0, sb = 0, n = 0;
   sel.forEach((k, j) => { if (t[j] >= lo && t[j] <= hi) { sr += R[k]; sg += G[k]; sb += B[k]; n++; } });
   const m = [sr / n, sg / n, sb / n];
-  return m.map(x => Math.min(Math.max(x / m[1], 0.05), 4.0));
+  return m.map(x => Math.min(Math.max(x / m[1], 0.05), 4.0)) as Vec3;
 }
 
-function neutro_mundo_gris(img, cfa, negro, blanco) {
+function neutro_mundo_gris(img: Imagen, cfa: Cfa, negro: number, blanco: number): Vec3 {
   const { d, h, w } = img;
   const tope = (blanco - negro) * 0.95;
   const suma = { R: 0, G: 0, B: 0 }, cuenta = { R: 0, G: 0, B: 0 };
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const v = d[y * w + x] - negro;
-      if (v > 0 && v < tope) { const c = cfa[(y & 1) * 2 + (x & 1)]; suma[c] += v; cuenta[c]++; }
+      if (v > 0 && v < tope) { const c = cfa[(y & 1) * 2 + (x & 1)] as Color; suma[c] += v; cuenta[c]++; }
     }
   }
-  const media = c => (cuenta[c] ? suma[c] / cuenta[c] : 1.0);
-  return ['R', 'G', 'B'].map(c => Math.min(Math.max(media(c) / media('G'), 0.05), 4.0));
+  const media = (c: Color) => (cuenta[c] ? suma[c] / cuenta[c] : 1.0);
+  return (['R', 'G', 'B'] as const).map(c => Math.min(Math.max(media(c) / media('G'), 0.05), 4.0)) as Vec3;
 }
 
-function neutro_creible(neutro) {
+function neutro_creible(neutro: Vec3 | null): boolean {
   if (!neutro || Math.min(...neutro) <= 0) return false;
   const x = Math.log(neutro[0] / neutro[1]), y = Math.log(neutro[2] / neutro[1]);
   return LOCUS_LN_R[0] <= x && x <= LOCUS_LN_R[1] && Math.abs(y - (LOCUS_A + LOCUS_B * x)) <= LOCUS_TOL;
 }
 
 /** Ganancias R, G, B (÷256) del AWB de la cámara, del MakerNote del JPG hermano; null si no hay. */
-export function awb_camara(jpg) {
+export function awb_camara(jpg: Uint8Array): number[] | null {
   try {
     const mk = makerNote(cabeceraJpeg(jpg).exif);
     if (!mk || mk.length < 0x21ac) return null;
@@ -302,22 +390,22 @@ export function awb_camara(jpg) {
 }
 
 // ---------------------------------------------------------------- matrices del DNG
-const _CCM_C713 = [[150592, -88384, 3328], [-27776, 143360, -50048], [3008, -52352, 114880]].map(f => f.map(v => v / 65536));
-const _SRGB_A_XYZ = [[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]];
+const _CCM_C713 = [[150592, -88384, 3328], [-27776, 143360, -50048], [3008, -52352, 114880]].map(f => f.map(v => v / 65536)) as Matriz3;
+const _SRGB_A_XYZ: Matriz3 = [[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]];
 const _XYZ_D65 = mulVec3(_SRGB_A_XYZ, [1, 1, 1]);
-const _XYZ_D50 = [0.9642, 1.0, 0.8249];
-const _XYZ_A = [1.0985, 1.0, 0.3558];
-const _BRADFORD = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
-const NEUTRO_M531_D65 = [256 / 451, 1.0, 256 / 417];
-const NEUTRO_M531_A = [1.0, 248 / 263, 248 / 828];
+const _XYZ_D50: Vec3 = [0.9642, 1.0, 0.8249];
+const _XYZ_A: Vec3 = [1.0985, 1.0, 0.3558];
+const _BRADFORD: Matriz3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
+const NEUTRO_M531_D65: Vec3 = [256 / 451, 1.0, 256 / 417];
+const NEUTRO_M531_A: Vec3 = [1.0, 248 / 263, 248 / 828];
 
-function _adaptacion(origen, destino) {
+function _adaptacion(origen: Vec3, destino: Vec3): Matriz3 {
   const d = mulVec3(_BRADFORD, destino), o = mulVec3(_BRADFORD, origen);
-  return mul3(mul3(inv3(_BRADFORD), diag3(d.map((v, i) => v / o[i]))), _BRADFORD);
+  return mul3(mul3(inv3(_BRADFORD), diag3(d.map((v, i) => v / o[i]) as Vec3)), _BRADFORD);
 }
 
 /** ColorMatrix1 (iluminante A), ColorMatrix2 (D65) y ForwardMatrix del DNG. */
-export function matrices_dng(ccm = null) {
+export function matrices_dng(ccm: Matriz3 | null = null): [Matriz3, Matriz3, Matriz3] {
   const bal_a_xyz65 = mul3(_SRGB_A_XYZ, ccm || _CCM_C713);
   const xyz65_a_bal = inv3(bal_a_xyz65);
   const cm_a = mul3(mul3(diag3(NEUTRO_M531_A), xyz65_a_bal), _adaptacion(_XYZ_A, _XYZ_D65));
@@ -327,9 +415,9 @@ export function matrices_dng(ccm = null) {
 }
 
 /** Balance de la cámara: ajusta RAW (lineal) ↔ JPG hermano (sRGB linealizado). null si no alinea. */
-function neutro_desde_jpg(jpg, img, cfa) {
+function neutro_desde_jpg(jpg: Uint8Array | null, img: Imagen, cfa: Cfa): Vec3 | null {
   if (!jpg || img.h !== 3264 || img.w !== 4320) return null;
-  let J;
+  let J: JpegDecodificado;
   try {                                               // la cámara puede dejar el JPG vacío o truncado
     J = decodificarJpeg(jpg);
   } catch (_) {
@@ -356,7 +444,7 @@ function neutro_desde_jpg(jpg, img, cfa) {
     const k = (j * BW + i) * 3;
     A[k] = sr / 64; A[k + 1] = sg / 64; A[k + 2] = sb / 64;
   }
-  let mejor = null;
+  let mejor: [number, Float64Array, Float64Array, number] | null = null;
   for (const rot of [0, -90, 90]) {
     // el JPG girado debe medir 3216 filas × 4288 columnas
     if (rot === 0 ? !(J.alto === 3216 && J.ancho === 4288) : !(J.ancho === 3216 && J.alto === 4288)) continue;
@@ -368,7 +456,7 @@ function neutro_desde_jpg(jpg, img, cfa) {
       for (let c = 0; c < 3; c++) jj[k + c] = (lut[J.rgb[o0 + c]] + lut[J.rgb[o0 + 3 + c]] + lut[J.rgb[o1 + c]] + lut[J.rgb[o1 + 3 + c]]) / 4;
     }
     // (X, Y) de la imagen girada → (x, y) de jj. −90 = a la derecha (ROTATE_270 de PIL), 90 = a la izquierda.
-    const origen = rot === 0 ? (X, Y) => Y * jw + X : rot === -90 ? (X, Y) => (jh - 1 - X) * jw + Y : (X, Y) => X * jw + (jw - 1 - Y);
+    const origen: (X: number, Y: number) => number = rot === 0 ? (X, Y) => Y * jw + X : rot === -90 ? (X, Y) => (jh - 1 - X) * jw + Y : (X, Y) => X * jw + (jw - 1 - Y);
     const B = new Float64Array(BH * BW * 3);
     for (let j = 0; j < BH; j++) for (let i = 0; i < BW; i++) {
       let s0 = 0, s1 = 0, s2 = 0;
@@ -379,7 +467,7 @@ function neutro_desde_jpg(jpg, img, cfa) {
       const k = (j * BW + i) * 3;
       B[k] = s0 / 64; B[k + 1] = s1 / 64; B[k + 2] = s2 / 64;
     }
-    const ok = [];
+    const ok: number[] = [];
     for (let k = 0; k < BH * BW; k++) {
       const a0 = A[3 * k], a1 = A[3 * k + 1], a2 = A[3 * k + 2];
       if (Math.max(a0, a1, a2) < 0.95 && Math.max(B[3 * k], B[3 * k + 1], B[3 * k + 2]) < 0.95 && Math.min(a0, a1, a2) > 0.002) ok.push(k);
@@ -392,17 +480,17 @@ function neutro_desde_jpg(jpg, img, cfa) {
   }
   if (mejor === null || mejor[0] < 0.9) return null;
   const X = minimosCuadrados3(mejor[1], mejor[2], mejor[3]);      // B ≈ A·X; M = Xᵀ
-  const M = [0, 1, 2].map(i => [0, 1, 2].map(j => X[j][i]));
+  const M = [0, 1, 2].map(i => [0, 1, 2].map(j => X[j][i])) as Matriz3;
   const neutro = mulVec3(inv3(M), [1, 1, 1]);
   if (neutro.some(v => !(v > 0))) return null;
-  return neutro.map(v => v / neutro[1]);
+  return neutro.map(v => v / neutro[1]) as Vec3;
 }
 
 // ---------------------------------------------------------------- giro
-export const GIROS = { no: 0, izq: 1, 180: 2, der: 3 };
+export const GIROS: Readonly<Record<'no' | 'izq' | '180' | 'der', Giro>> = { no: 0, izq: 1, 180: 2, der: 3 };
 
 /** Cuartos de vuelta a la izquierda que la cámara ya aplicó a los píxeles del JPG: 1 si está en vertical. */
-export function giro_jpg(jpg) {
+export function giro_jpg(jpg: Uint8Array): Giro {
   try {
     const c = cabeceraJpeg(jpg);
     return c.alto > c.ancho ? 1 : 0;
@@ -411,47 +499,47 @@ export function giro_jpg(jpg) {
   }
 }
 
-function giro_pedido(rotar, jpg) {
+function giro_pedido(rotar: NonNullable<OpcionesConversion['rotar']>, jpg: Uint8Array | null): Giro {
   if (rotar === 'camara') return jpg ? giro_jpg(jpg) : 0;
   return GIROS[rotar];
 }
 
 /** Deja el JPG de la cámara mostrándose con `giro` cuartos a la izquierda respecto del sensor
  *  (descuenta el giro que la cámara ya aplicó a los píxeles). Cambia dos bytes, en el sitio. */
-export function orientar_jpg(jpg, giro) {
-  return ponerOrientacion(jpg, ETIQUETA_GIRO[(((giro - giro_jpg(jpg)) % 4) + 4) % 4]);
+export function orientar_jpg(jpg: Uint8Array, giro: Giro): boolean {
+  return ponerOrientacion(jpg, ETIQUETA_GIRO[((((giro - giro_jpg(jpg)) % 4) + 4) % 4) as Giro]);
 }
 
 // ---------------------------------------------------------------- flujo
-const PERFILES = {
+const PERFILES: Readonly<Record<number, PerfilTamano>> = {
   28_200_960: { packing: 'u16_le', ancho: 4320 },
   14_100_480: { packing: 'u8', ancho: 4320, decodificar: true },
   21_150_720: { bits: 12, ancho: 4320, blanco: 1023, negro: 0, balance_jpg: false, neutro: 'modo4', decodificar10: true },
   17_625_600: { bits: 10, ancho: 4320 },
 };
 export const TAMANOS_PERFIL = Object.keys(PERFILES).map(Number);
-const CFA_M531 = 'GBRG';
+const CFA_M531: Cfa = 'GBRG';
 const MAX_CODIGO_MODO4 = 1020;
 const BLANCO_M4_LINEAL = 3950;
-const NEUTRO_M531 = [0.7056, 1.0, 0.5292];
-const NEUTRO_M531_MODO4 = [0.62, 1.0, 0.60];
+const NEUTRO_M531: Vec3 = [0.7056, 1.0, 0.5292];
+const NEUTRO_M531_MODO4: Vec3 = [0.62, 1.0, 0.60];
 const QUEMADO_MAX = 0.02;
 const AWB_OMISION = [400, 256, 456];
 const LOCUS_A = -0.9243, LOCUS_B = -0.8826;
 const LOCUS_TOL = 0.20;
 const LOCUS_LN_R = [-0.74, 0.33];
-export const CCM_M531 = [[1.73412, -0.7057, -0.02842], [-0.27821, 1.68179, -0.40358], [-0.08057, -0.50968, 1.59025]];
+export const CCM_M531: Matriz3 = [[1.73412, -0.7057, -0.02842], [-0.27821, 1.68179, -0.40358], [-0.08057, -0.50968, 1.59025]];
 const DECODE_M531 = Uint16Array.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79, 80, 81, 82, 83, 85, 86, 87, 88, 90, 91, 92, 94, 95, 96, 98, 99, 100, 102, 103, 105, 106, 108, 109, 111, 113, 114, 116, 118, 119, 121, 123, 125, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152, 154, 157, 159, 161, 164, 166, 168, 171, 173, 176, 178, 181, 183, 186, 189, 191, 194, 197, 200, 203, 206, 209, 212, 215, 218, 221, 224, 227, 231, 234, 237, 241, 244, 248, 251, 255, 259, 262, 266, 270, 274, 278, 282, 286, 290, 294, 298, 303, 307, 312, 316, 321, 325, 330, 335, 339, 344, 349, 354, 360, 365, 370, 375, 381, 386, 392, 397, 403, 409, 415, 421, 427, 433, 439, 446, 452, 459, 465, 472, 479, 486, 493, 500, 507, 514, 522, 529, 537, 545, 553, 560, 569, 577, 585, 594, 602, 611, 620, 629, 638, 647, 656, 666, 675, 685, 695, 705, 715, 725, 736, 746, 757, 768, 779, 790, 802, 813, 825, 837, 849, 861, 874, 886, 899, 912, 925, 939, 952, 966, 980, 994, 1008, 1023]);
 
-function maximo(a) {
+function maximo(a: Numeros): number {
   let m = 0;
   for (let i = 0; i < a.length; i++) if (a[i] > m) m = a[i];
   return m;
 }
 
 /** campos: [Uint8Array] (uno o dos archivos de un disparo). Devuelve [img, info]. */
-export function analizar(campos, { bits = null, packing = null, ancho = null, layout = null, cfa = null, invertir = false,
-  nombres = null } = {}) {
+export function analizar(campos: readonly Uint8Array[], { bits = null, packing = null, ancho = null, layout = null, cfa = null, invertir = false,
+  nombres = null }: OpcionesAnalisis = {}): [Imagen, Info] {
   let datos = campos;
   const perfil = (packing === null && ancho === null && datos.length === 1 && PERFILES[datos[0].length]) || null;
   if (perfil) {
@@ -459,14 +547,14 @@ export function analizar(campos, { bits = null, packing = null, ancho = null, la
     packing = perfil.packing ?? null;
     if (packing === null) {     // perfil con bits conocidos pero orden de empaquetado por detectar
       const c = detectar_formato(datos[0], { solo: (_, b) => b === perfil.bits });
-      packing = c.length ? c[0].packing : `p${perfil.bits}_msb`;
+      packing = c.length ? c[0].packing : `p${perfil.bits}_msb` as Packing;
     }
   }
   const decodificar = Boolean(perfil && perfil.decodificar);
-  let perfil_info = perfil || {};
+  let perfil_info: Partial<PerfilTamano> = perfil || {};
   if (perfil && cfa === null) cfa = CFA_M531;
   if (invertir) datos = [...datos].reverse();
-  let cands;
+  let cands: Candidato[];
   if (packing === null) {
     cands = detectar_formato(datos[0]);
     if (bits) { const f = cands.filter(c => c.bits === bits); if (f.length) cands = f; }
@@ -481,12 +569,14 @@ export function analizar(campos, { bits = null, packing = null, ancho = null, la
   } else {
     cands = [];
     if (ancho === null) {
-      const c = detectar_formato(datos[0], { solo: p => p === packing });
+      const pedido = packing;
+      const c = detectar_formato(datos[0], { solo: p => p === pedido });
       if (!c.length) throw new Motivo(`no se pudo detectar el ancho para ${packing}; pasar --width`);
       ancho = c[0].ancho;
     }
   }
-  let imgs = datos.map(d => a_imagen(d, packing, ancho));
+  const packingFinal = packing, anchoFinal = ancho;
+  const imgs = datos.map(d => a_imagen(d, packingFinal, anchoFinal));
   if (decodificar) for (const c of imgs) { const d = c.d; for (let i = 0; i < d.length; i++) d[i] = DECODE_M531[d[i]]; }
   const max_crudo = Math.max(...imgs.map(c => maximo(c.d)));
   const lineal12 = Boolean(perfil && perfil.decodificar10 && max_crudo > MAX_CODIGO_MODO4);
@@ -505,27 +595,28 @@ export function analizar(campos, { bits = null, packing = null, ancho = null, la
   let [img, layout_usado] = combinar(imgs, layout);
   if (img.h % 2) img = { d: img.d.subarray(0, (img.h - 1) * img.w), h: img.h - 1, w: img.w };
   const [cfa_det, cfa_info] = detectar_cfa(img);
-  const perfilPub = {};
-  for (const k of ['blanco', 'negro', 'balance_jpg', 'neutro']) if (k in perfil_info) perfilPub[k] = perfil_info[k];
-  const info = {
+  const perfilPub: Record<string, unknown> = {};
+  for (const k of ['blanco', 'negro', 'balance_jpg', 'neutro'] as const) if (k in perfil_info) perfilPub[k] = perfil_info[k];
+  const info: Info = {
     archivos: nombres, tamanos: datos.map(d => d.length), packing, bits: BITS[packing], ancho, alto: img.h,
     layout: layout_usado, orden_campos: invertir ? 'invertido' : 'O, b', cfa: cfa || cfa_det, cfa_detectado: cfa_det,
     cfa_rb_provisional: cfa === null,
     cfa_metricas: { d_verde: redondear(cfa_info.d_verde, 5), d_otra: redondear(cfa_info.d_otra, 5) },
     candidatos: cands.slice(0, 5), decodificado: decodificar, max_crudo,
     modo4: lineal12 ? 'lineal12' : (perfil_info.decodificar10 ? 'curva10' : null),
-    perfil_camara: Boolean(perfil), perfil: perfilPub,
+    perfil_camara: Boolean(perfil), perfil: perfilPub as PerfilPublico,
   };
   return [img, info];
 }
 
 /** AsShotNeutral de la foto y de dónde salió (info.balance). Mismo orden que en Python. */
-function elegir_balance(jpg, img, info, negro, blanco, balance = 'auto') {
+function elegir_balance(jpg: Uint8Array | null, img: Imagen, info: Info, negro: number, blanco: number,
+  balance: NonNullable<OpcionesConversion['balance']> = 'auto'): Vec3 {
   const pf = info.perfil || {};
   const cfa = info.cfa;
   const awb = jpg ? awb_camara(jpg) : null;
   info.awb_camara = awb;
-  const n_awb = awb ? [awb[1] / awb[0], 1.0, awb[1] / awb[2]] : null;
+  const n_awb: Vec3 | null = awb ? [awb[1] / awb[0], 1.0, awb[1] / awb[2]] : null;
   const awb_util = Boolean(awb && !awb.every((v, i) => v === AWB_OMISION[i]) && neutro_creible(n_awb));
   const modo4 = pf.neutro === 'modo4';
   const de_camara = Boolean(info.perfil_camara);
@@ -533,7 +624,7 @@ function elegir_balance(jpg, img, info, negro, blanco, balance = 'auto') {
     info.balance = modo4 ? 'fijo_modo4' : 'fijo_m531';
     return modo4 ? NEUTRO_M531_MODO4 : NEUTRO_M531;
   }
-  if (balance === 'camara' && awb && neutro_creible(n_awb)) {
+  if (balance === 'camara' && n_awb && neutro_creible(n_awb)) {
     info.balance = 'awb_camara';
     return n_awb;
   }
@@ -548,14 +639,14 @@ function elegir_balance(jpg, img, info, negro, blanco, balance = 'auto') {
   const neutro = neutro_claros_frios(img, cfa, negro, blanco);
   info.quemado = redondear(fraccion_quemada(img, negro, blanco), 4);
   const descartado = () => (neutro === null ? null : neutro.map(x => redondear(x, 4)));
-  if (info.modo4 === 'lineal12' && info.quemado > QUEMADO_MAX && awb_util) {
+  if (info.modo4 === 'lineal12' && info.quemado > QUEMADO_MAX && awb_util && n_awb) {
     info.parche_blanco_descartado = descartado();
     info.balance = 'awb_camara';
     return n_awb;
   }
-  if (neutro_creible(neutro)) { info.balance = 'parche_blanco'; return neutro; }
+  if (neutro && neutro_creible(neutro)) { info.balance = 'parche_blanco'; return neutro; }
   info.parche_blanco_descartado = descartado();
-  if (awb_util) { info.balance = 'awb_camara'; return n_awb; }
+  if (awb_util && n_awb) { info.balance = 'awb_camara'; return n_awb; }
   if (modo4) { info.balance = 'fijo_modo4'; return NEUTRO_M531_MODO4; }
   info.balance = 'mundo_gris';
   return neutro_mundo_gris(img, cfa, negro, blanco);
@@ -566,17 +657,18 @@ function elegir_balance(jpg, img, info, negro, blanco, balance = 'auto') {
  * jpg = bytes del JPG hermano (o null). Devuelve { img: {d, h, w}, info, neutro }.
  * Lanza Motivo con el texto para el usuario si el archivo no se puede leer.
  */
-export function convertir(campos, jpg, { balance = 'auto', rotar = 'no', black = null, white = null, ...resto } = {}) {
+export function convertir(campos: readonly Uint8Array[], jpg: Uint8Array | null,
+  { balance = 'auto', rotar = 'no', black = null, white = null, ...resto }: OpcionesConversion = {}): { img: Imagen; info: InfoConvertida; neutro: Vec3 } {
   if (jpg && !jpg.length) jpg = null;
   const [img, info] = analizar(campos, resto);
   const pf = info.perfil || {};
-  let negro, blanco;
+  let negro: number, blanco: number;
   if (info.decodificado) {
     negro = black ?? 0;                               // el firmware ya restó el negro
     blanco = white ?? 1023;
   } else if ('blanco' in pf) {
     negro = black ?? (pf.negro ?? 0);
-    blanco = white ?? pf.blanco;
+    blanco = white ?? pf.blanco!;                     // 'blanco' in pf
   } else {
     if (black !== null) negro = black;
     else {                                            // negro provisional: percentil bajo de la escena
@@ -596,5 +688,6 @@ export function convertir(campos, jpg, { balance = 'auto', rotar = 'no', black =
   info.matriz = 'm531';
   info.giro = giro_pedido(rotar, jpg);
   info.orientacion = ETIQUETA_GIRO[info.giro];
-  return { img, info, neutro };
+  // Aquí ya están todos los campos que `convertir` añade.
+  return { img, info: info as InfoConvertida, neutro };
 }

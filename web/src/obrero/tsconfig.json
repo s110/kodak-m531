@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"],
+    "tsBuildInfoFile": "../../.tsbuild/obrero.tsbuildinfo"
+  },
+  "include": ["./**/*.ts"],
+  "references": [{ "path": "../nucleo" }, { "path": "../modelo" }]
+}

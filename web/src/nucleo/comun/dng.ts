@@ -1,14 +1,46 @@
 // Escritor de DNG (TIFF con un IFD, mosaico de 16 bits sin comprimir) y etiqueta de orientación.
 // Genérico: la cámara pone marca, modelo, patrón, niveles, neutro y matrices. Sin DOM.
 import { redondearPar } from './num.js';
+import type { Matriz3, Vec3 } from './num.js';
 
-const CFA = { RGGB: [0, 1, 1, 2], BGGR: [2, 1, 1, 0], GRBG: [1, 0, 2, 1], GBRG: [1, 2, 0, 1] };
+export type Cfa = 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
+/** Cuartos de vuelta a la izquierda respecto del sensor. */
+export type Giro = 0 | 1 | 2 | 3;
+/** Bytes con memoria propia (no compartida): se pueden transferir a otro hilo. */
+export type Bytes = Uint8Array<ArrayBuffer>;
+
+export interface ParamsDng {
+  readonly ancho: number;
+  readonly alto: number;
+  readonly cfa: Cfa;
+  readonly negro: number;
+  readonly blanco: number;
+  readonly neutro: Vec3;
+  /** Valor de la etiqueta Orientation (1, 8, 3 o 6). */
+  readonly orientacion: number;
+  readonly marca: string;
+  readonly modelo: string;
+  readonly modeloUnico: string;
+  readonly software: string;
+  readonly cm1: Matriz3;
+  readonly cm2: Matriz3;
+  readonly fm: Matriz3;
+  readonly iluminante1: number;
+  readonly iluminante2: number;
+  /** [x, y, ancho, alto] del recorte por omisión; sin él, la imagen entera. */
+  readonly recorte?: readonly [number, number, number, number];
+}
+type Racional = [number, number];
+
+const CFA: Readonly<Record<Cfa, readonly number[]>> = { RGGB: [0, 1, 1, 2], BGGR: [2, 1, 1, 0], GRBG: [1, 0, 2, 1], GBRG: [1, 2, 0, 1] };
 /** Cuartos de vuelta a la izquierda respecto del sensor → etiqueta Orientation (TIFF/EXIF). */
-export const ETIQUETA_GIRO = { 0: 1, 1: 8, 2: 3, 3: 6 };
-const GIRO_DE_ETIQUETA = { 1: 0, 8: 1, 3: 2, 6: 3 };
-const TAM = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 10: 8 };
+export const ETIQUETA_GIRO: Readonly<Record<Giro, number>> = { 0: 1, 1: 8, 2: 3, 3: 6 };
+const GIRO_DE_ETIQUETA: Readonly<Record<number, Giro>> = { 1: 0, 8: 1, 3: 2, 6: 3 };
+/** Tipos de dato TIFF que se usan: BYTE, ASCII, SHORT, LONG, RATIONAL y SRATIONAL → bytes por valor. */
+type TipoTiff = 1 | 2 | 3 | 4 | 5 | 10;
+const TAM: Readonly<Record<TipoTiff, number>> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 10: 8 };
 
-function racional(x, d = 10000) {
+function racional(x: number, d = 10000): Racional {
   return [redondearPar(x * d), d];
 }
 
@@ -19,34 +51,43 @@ function racional(x, d = 10000) {
  * p = { ancho, alto, cfa, negro, blanco, neutro[3], orientacion, marca, modelo, modeloUnico, software,
  *       cm1, cm2, fm (3×3), iluminante1, iluminante2, recorte? }
  */
-export function cabeceraDng(p) {
+export function cabeceraDng(p: ParamsDng): Bytes {
   const { ancho: w, alto: h } = p;
   const nDatos = w * h * 2;
-  const entradas = [];
+  const entradas: { t: number; tipo: TipoTiff; n: number; vb: Uint8Array }[] = [];
   const txt = new TextEncoder();
-  const tag = (t, tipo, valores) => {
-    let vb, n;
+  // El tipo de `valores` va con `tipo`: texto para ASCII, pares para los racionales, números para el resto.
+  function tag(t: number, tipo: 2, valores: string): void;
+  function tag(t: number, tipo: 5 | 10, valores: readonly Racional[]): void;
+  function tag(t: number, tipo: 1 | 3 | 4, valores: readonly number[]): void;
+  function tag(t: number, tipo: TipoTiff, valores: string | readonly number[] | readonly Racional[]): void {
+    let vb: Uint8Array, n: number;
     if (tipo === 2) {
-      const s = txt.encode(valores);
+      const s = txt.encode(valores as string);
       vb = new Uint8Array(s.length + 1); vb.set(s); n = vb.length;
     } else {
       n = valores.length;
       vb = new Uint8Array(n * TAM[tipo]);
       const dv = new DataView(vb.buffer);
-      valores.forEach((v, i) => {
-        if (tipo === 1) dv.setUint8(i, v);
-        else if (tipo === 3) dv.setUint16(2 * i, v, true);
-        else if (tipo === 4) dv.setUint32(4 * i, v, true);
-        else if (tipo === 5) { dv.setUint32(8 * i, v[0], true); dv.setUint32(8 * i + 4, v[1], true); }
-        else { dv.setInt32(8 * i, v[0], true); dv.setInt32(8 * i + 4, v[1], true); }
-      });
+      if (tipo === 5 || tipo === 10) {
+        (valores as readonly Racional[]).forEach((v, i) => {
+          if (tipo === 5) { dv.setUint32(8 * i, v[0], true); dv.setUint32(8 * i + 4, v[1], true); }
+          else { dv.setInt32(8 * i, v[0], true); dv.setInt32(8 * i + 4, v[1], true); }
+        });
+      } else {
+        (valores as readonly number[]).forEach((v, i) => {
+          if (tipo === 1) dv.setUint8(i, v);
+          else if (tipo === 3) dv.setUint16(2 * i, v, true);
+          else dv.setUint32(4 * i, v, true);
+        });
+      }
     }
     entradas.push({ t, tipo, n, vb });
-  };
+  }
   const [cx, cy, cw, ch] = p.recorte || [0, 0, w, h];
   const maxN = Math.max(...p.neutro);
   const neutro = p.neutro.map(v => v / maxN);              // AsShotNeutral: máximo 1
-  const plano = m => m.flat().map(v => racional(v));
+  const plano = (m: Matriz3): Racional[] => m.flat().map(v => racional(v));
   tag(254, 4, [0]); tag(256, 4, [w]); tag(257, 4, [h]); tag(258, 3, [16]); tag(259, 3, [1]);
   tag(262, 3, [32803]); tag(271, 2, p.marca); tag(272, 2, p.modelo);
   tag(273, 4, [0]); tag(274, 3, [p.orientacion]); tag(277, 3, [1]); tag(278, 4, [h]); tag(279, 4, [nDatos]);
@@ -87,7 +128,7 @@ export function cabeceraDng(p) {
 }
 
 /** Los píxeles (Uint16Array) como bytes little-endian, sin copiar si la máquina ya lo es. */
-export function bytesPixeles(img) {
+export function bytesPixeles(img: Uint16Array<ArrayBuffer>): Bytes {
   const u8 = new Uint8Array(img.buffer, img.byteOffset, img.byteLength);
   if (new Uint8Array(new Uint16Array([1]).buffer)[0] === 1) return u8;
   const out = new Uint8Array(img.byteLength);
@@ -99,7 +140,7 @@ export function bytesPixeles(img) {
  * Posición de los dos bytes de la etiqueta Orientation (0x0112) en un DNG/TIFF o en el EXIF de un JPG,
  * y el orden de bytes; null si el archivo no la trae. Mismo recorrido que poner_orientacion de Python.
  */
-function buscarOrientacion(b) {
+function buscarOrientacion(b: Uint8Array): { pos: number; le: boolean } | null {
   let base = 0;
   if (b.length < 4) return null;
   if (b[0] === 0xff && b[1] === 0xd8) {                 // JPEG: buscar el segmento APP1 "Exif"
@@ -127,7 +168,7 @@ function buscarOrientacion(b) {
 }
 
 /** Escribe la etiqueta Orientation en el sitio (dos bytes). false si el archivo no la trae. */
-export function ponerOrientacion(bytes, valor) {
+export function ponerOrientacion(bytes: Uint8Array, valor: number): boolean {
   const o = buscarOrientacion(bytes);
   if (!o) return false;
   new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint16(o.pos, valor, o.le);
@@ -135,7 +176,7 @@ export function ponerOrientacion(bytes, valor) {
 }
 
 /** Cuartos de vuelta a la izquierda que pide hoy la etiqueta Orientation (0 si no la hay). */
-export function leerGiro(bytes) {
+export function leerGiro(bytes: Uint8Array): Giro {
   const o = buscarOrientacion(bytes);
   if (!o) return 0;
   return GIRO_DE_ETIQUETA[new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(o.pos, o.le)] ?? 0;

@@ -2,17 +2,38 @@
 // Media resolución (una celda de 2×2 del mosaico = un píxel), el mismo balance y la misma matriz que
 // lleva el DNG, gamma sRGB y la orientación aplicada. No es el revelado final: sin interpolación ni
 // curva de tono. Sin DOM.
+import type { Matriz3, Vec3 } from './num.js';
+import type { Cfa, Giro } from './dng.js';
+
+/** Lo que hace falta para revelar un mosaico: lo mismo que lleva el DNG. */
+export interface ParamsRevelado {
+  readonly ancho: number;
+  readonly alto: number;
+  readonly cfa: Cfa;
+  readonly negro: number;
+  readonly blanco: number;
+  readonly neutro: Vec3;
+  /** cámara balanceada → sRGB lineal */
+  readonly ccm: Matriz3;
+}
+export interface Vista {
+  readonly rgba: Uint8ClampedArray<ArrayBuffer>;
+  readonly ancho: number;
+  readonly alto: number;
+}
+type Color = 'R' | 'G' | 'B';
 
 /**
  * pix: Uint16Array del mosaico. p = { ancho, alto, cfa, negro, blanco, neutro, ccm } con ccm = cámara
  * balanceada → sRGB lineal. paso = celdas promediadas por lado (1 = media resolución); giro = cuartos
  * de vuelta a la izquierda. Devuelve { rgba: Uint8ClampedArray, ancho, alto }.
  */
-export function revelar(pix, p, { paso = 1, giro = 0 } = {}) {
+export function revelar(pix: Uint16Array, p: ParamsRevelado, { paso = 1, giro = 0 }: { paso?: number; giro?: Giro } = {}): Vista {
   const w = p.ancho, ow = Math.floor(w / 2 / paso), oh = Math.floor(p.alto / 2 / paso);
-  const pos = { R: [], G: [], B: [] };
-  [...p.cfa].forEach((c, i) => pos[c].push((i >> 1) * w + (i & 1)));
-  const [dr] = pos.R, [db] = pos.B, [dg1, dg2] = pos.G;
+  const pos: Record<Color, number[]> = { R: [], G: [], B: [] };
+  [...p.cfa].forEach((c, i) => pos[c as Color].push((i >> 1) * w + (i & 1)));
+  // un patrón Bayer tiene un R, un B y dos G
+  const dr = pos.R[0]!, db = pos.B[0]!, dg1 = pos.G[0]!, dg2 = pos.G[1]!;
   const maxN = Math.max(...p.neutro);
   const escala = 1 / ((p.blanco - p.negro) * paso * paso);
   const gan = p.neutro.map(v => escala / (v / maxN));     // con el neutro a máximo 1, lo saturado queda blanco

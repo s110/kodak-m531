@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    // Aquí va apagado: son bucles numéricos sobre arreglos tipados con el índice acotado por el propio
+    // bucle; con la opción encendida cada lectura llevaría un `!` que no comprueba nada.
+    "noUncheckedIndexedAccess": false,
+    "tsBuildInfoFile": "../../.tsbuild/nucleo.tsbuildinfo"
+  },
+  "include": ["./**/*.ts"]
+}

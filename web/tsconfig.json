@@ -1,0 +1,15 @@
+{
+  // `tsc -b` compila los cuatro proyectos en orden. Cada uno tiene su propia `lib`, para que el
+  // compilador impida usar el DOM donde no lo hay:
+  //   nucleo  conversión (DNG, JPEG, FFT, perfiles de cámara): sólo ES2022. Corre en Node y en el Worker.
+  //   modelo  máquinas de estado, protocolo del Worker y sus tareas: sólo ES2022.
+  //   obrero  entrada del Worker: ES2022 + WebWorker.
+  //   pagina  interfaz: ES2022 + DOM.
+  "files": [],
+  "references": [
+    { "path": "src/nucleo" },
+    { "path": "src/modelo" },
+    { "path": "src/obrero" },
+    { "path": "src/pagina" }
+  ]
+}

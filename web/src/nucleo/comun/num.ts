@@ -1,8 +1,13 @@
 // Aritmética que tiene que dar lo mismo que numpy/Python: redondeo al par, percentil lineal,
 // autocorrelación por FFT y álgebra de 3×3. Sin DOM: corre igual en Node y en un Worker.
 
+export type Vec3 = [number, number, number];
+export type Matriz3 = [Vec3, Vec3, Vec3];
+/** Cualquier arreglo de números que sólo se lee: Array o arreglo tipado. */
+export type Numeros = ArrayLike<number>;
+
 /** round() de Python para enteros: mitad al par. */
-export function redondearPar(x) {
+export function redondearPar(x: number): number {
   const f = Math.floor(x), d = x - f;
   if (d < 0.5) return f;
   if (d > 0.5) return f + 1;
@@ -10,18 +15,18 @@ export function redondearPar(x) {
 }
 
 /** round(x, n) de Python (para informar; un empate exacto en decimal no ocurre con datos reales). */
-export function redondear(x, n) {
+export function redondear(x: number, n: number): number {
   return Number(x.toFixed(n));
 }
 
 /** _lerp de numpy (percentil 'linear'). */
-function lerp(a, b, t) {
+function lerp(a: number, b: number, t: number): number {
   const d = b - a;
   return t >= 0.5 ? b - d * (1 - t) : a + d * t;
 }
 
 /** np.percentile(v, q) con método lineal; `orden` es v ya ordenado ascendente (Float64Array). */
-export function percentilOrdenado(orden, q) {
+export function percentilOrdenado(orden: Float64Array, q: number): number {
   const n = orden.length;
   const vi = (n - 1) * (q / 100);
   const i = Math.floor(vi);
@@ -30,7 +35,7 @@ export function percentilOrdenado(orden, q) {
 }
 
 /** np.percentile sobre un histograma de enteros (cuenta[v] = veces que aparece v). */
-export function percentilHistograma(cuenta, total, q) {
+export function percentilHistograma(cuenta: Uint32Array, total: number, q: number): number {
   const vi = (total - 1) * (q / 100);
   const i = Math.floor(vi), sig = Math.min(i + 1, total - 1);
   let a = -1, b = -1, acum = 0;
@@ -43,8 +48,9 @@ export function percentilHistograma(cuenta, total, q) {
 }
 
 // ---------------------------------------------------------------- FFT
-const _tablas = new Map();
-function tabla(n) {
+interface TablaFft { readonly cos: Float64Array; readonly sen: Float64Array; readonly inv: Uint32Array }
+const _tablas = new Map<number, TablaFft>();
+function tabla(n: number): TablaFft {
   let t = _tablas.get(n);
   if (!t) {
     const cos = new Float64Array(n / 2), sen = new Float64Array(n / 2);
@@ -66,7 +72,7 @@ function tabla(n) {
 }
 
 /** FFT compleja en el sitio, base 2 (n potencia de 2). */
-export function fft(re, im) {
+export function fft(re: Float64Array, im: Float64Array): void {
   const n = re.length, { cos, sen, inv } = tabla(n);
   for (let i = 0; i < n; i++) {
     const j = inv[i];
@@ -96,7 +102,7 @@ export function fft(re, im) {
  * más los lagMax valores siguientes): mismo resultado matemático que una sola FFT de 4 M de puntos,
  * con 2 MB de memoria en vez de 100. La diferencia con numpy es de redondeo (~1e-13).
  */
-export function autocorrelacion(x, lagMax) {
+export function autocorrelacion(x: Float64Array, lagMax: number): Float64Array<ArrayBuffer> {
   const n = x.length;
   const ac = new Float64Array(lagMax + 1);
   if (lagMax <= 16) {
@@ -138,18 +144,18 @@ export function autocorrelacion(x, lagMax) {
 }
 
 // ---------------------------------------------------------------- 3×3
-export function mul3(a, b) {
-  const r = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+export function mul3(a: Matriz3, b: Matriz3): Matriz3 {
+  const r: Matriz3 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) r[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
   return r;
 }
-export function mulVec3(a, v) {
-  return a.map(f => f[0] * v[0] + f[1] * v[1] + f[2] * v[2]);
+export function mulVec3(a: Matriz3, v: Vec3): Vec3 {
+  return a.map(f => f[0] * v[0] + f[1] * v[1] + f[2] * v[2]) as Vec3;       // map conserva el largo
 }
-export function diag3(v) {
+export function diag3(v: Vec3): Matriz3 {
   return [[v[0], 0, 0], [0, v[1], 0], [0, 0, v[2]]];
 }
-export function inv3(m) {
+export function inv3(m: Matriz3): Matriz3 {
   const [[a, b, c], [d, e, f], [g, h, i]] = m;
   const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
   const det = a * A + b * B + c * C;
@@ -160,10 +166,10 @@ export function inv3(m) {
 
 /** Mínimos cuadrados A·X ≈ B (A y B de n×3, por filas en Float64Array): devuelve X de 3×3.
  *  QR por Gram-Schmidt modificado, para no elevar al cuadrado el número de condición. */
-export function minimosCuadrados3(A, B, n) {
+export function minimosCuadrados3(A: Float64Array, B: Float64Array, n: number): Matriz3 {
   const q = [new Float64Array(n), new Float64Array(n), new Float64Array(n)];
   for (let i = 0; i < n; i++) { q[0][i] = A[3 * i]; q[1][i] = A[3 * i + 1]; q[2][i] = A[3 * i + 2]; }
-  const R = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  const R: Matriz3 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   for (let j = 0; j < 3; j++) {
     for (let k = 0; k < j; k++) {
       let p = 0;
@@ -176,7 +182,7 @@ export function minimosCuadrados3(A, B, n) {
     R[j][j] = Math.sqrt(s);
     for (let i = 0; i < n; i++) q[j][i] /= R[j][j];
   }
-  const X = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  const X: Matriz3 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   for (let c = 0; c < 3; c++) {
     const y = [0, 0, 0];
     for (let j = 0; j < 3; j++) {
@@ -194,7 +200,7 @@ export function minimosCuadrados3(A, B, n) {
 }
 
 /** np.corrcoef(a, b)[0, 1]. */
-export function correlacion(a, b) {
+export function correlacion(a: Numeros, b: Numeros): number {
   const n = a.length;
   let ma = 0, mb = 0;
   for (let i = 0; i < n; i++) { ma += a[i]; mb += b[i]; }
