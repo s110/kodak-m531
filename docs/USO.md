@@ -46,6 +46,18 @@ balance automático; con `M4L` sin flash no lo calcula y el JPG sale cálido sal
 
 ## 3. Importar
 
+### Automático, con sdvault (no hay que hacer nada)
+
+Al meter la SD, sdvault la respalda en `/Volumes/Datos/PhotoVault`. Cuando termina, el agente
+`me.sebastian.m531-dng` convierte los RAW nuevos de la M531 a DNG en `~/Pictures/m531_dng/<fecha de hoy>/`
+(con su JPG al lado) y avisa con una notificación «N DNG nuevos». Sin fotos nuevas no hace nada.
+
+- Sólo mira carpetas `DCIM/1xxKM531` del vault; otras cámaras no las toca. El vault sólo se lee.
+- No pisa un DNG que ya exista con ese nombre en la carpeta del día (p. ej. hecho con `./importar`).
+- Registro: `~/Library/Logs/m531_dng.log`. Estado (qué RAW ya vio): `~/.local/state/m531_dng/vistos.json`.
+- Lo que ya estaba en el vault al instalarlo no se convierte; para eso, arrastra la carpeta al conversor.
+- Quitar: `.venv/bin/python tools/instalar_auto.py --quitar`; volver a poner: sin `--quitar`.
+
 ### Con la ventana (lo más rápido)
 
 Abre **Conversor M531** (en `~/Applications`, o `./conversor` desde la repo). Se abre una página en el
